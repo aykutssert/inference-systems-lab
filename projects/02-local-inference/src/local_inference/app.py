@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 
 from local_inference.api import ChatBackend, OpenAIAPIError, router
 from local_inference.api_models import ErrorDetail, ErrorResponse
+from local_inference.health import router as health_router
+from local_inference.service_state import ServiceState
 
 
 def create_app(backend: ChatBackend | None = None) -> FastAPI:
@@ -17,12 +19,17 @@ def create_app(backend: ChatBackend | None = None) -> FastAPI:
         resolved_backend: ChatBackend = MlxBackend()
     else:
         resolved_backend = backend
+    service_state = ServiceState()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         resolved_backend.load()
+        service_state.mark_ready()
         app.state.started_at = int(time.time())
-        yield
+        try:
+            yield
+        finally:
+            service_state.mark_not_ready()
 
     app = FastAPI(
         title="Local Inference",
@@ -30,7 +37,9 @@ def create_app(backend: ChatBackend | None = None) -> FastAPI:
         lifespan=lifespan,
     )
     app.state.backend = resolved_backend
+    app.state.service_state = service_state
     app.state.started_at = int(time.time())
+    app.include_router(health_router)
     app.include_router(router)
 
     @app.exception_handler(OpenAIAPIError)

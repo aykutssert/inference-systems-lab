@@ -1,3 +1,4 @@
+import logging
 import time
 import uuid
 from collections.abc import Sequence
@@ -16,6 +17,8 @@ from local_inference.api_models import (
 )
 from local_inference.benchmark_runner import GenerationResult
 from local_inference.chat import ChatMessage
+
+logger = logging.getLogger(__name__)
 
 
 class ChatBackend(Protocol):
@@ -91,7 +94,16 @@ def create_chat_completion(
         }
         for message in payload.messages
     )
-    result = backend.generate_chat(messages, payload.token_limit)
+    try:
+        result = backend.generate_chat(messages, payload.token_limit)
+    except RuntimeError as error:
+        logger.exception("backend_generation_failed")
+        raise OpenAIAPIError(
+            "The inference backend is temporarily unavailable",
+            error_type="server_error",
+            code="backend_unavailable",
+            status_code=503,
+        ) from error
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex}",
         created=int(time.time()),

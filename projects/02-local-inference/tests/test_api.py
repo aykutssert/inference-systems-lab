@@ -38,6 +38,34 @@ class FakeBackend:
         )
 
 
+class FailingBackend(FakeBackend):
+    def generate_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> GenerationResult:
+        raise RuntimeError("sensitive backend failure")
+
+
+def test_health_endpoints_reflect_service_lifecycle() -> None:
+    app = create_app(FakeBackend())
+    client = TestClient(app)
+
+    before_startup = client.get("/health/ready")
+    liveness = client.get("/health/live")
+    client.close()
+
+    with TestClient(app) as started_client:
+        ready = started_client.get("/health/ready")
+
+    assert before_startup.status_code == 503
+    assert liveness.status_code == 200
+    assert liveness.json() == {"status": "ok"}
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready"}
+    assert app.state.service_state.is_ready is False
+
+
 def test_lists_available_model() -> None:
     backend = FakeBackend()
 
@@ -190,3 +218,25 @@ def test_rejects_conflicting_token_limits() -> None:
 
     assert response.status_code == 400
     assert response.json()["error"]["type"] == "invalid_request_error"
+
+
+def test_translates_backend_failure_without_leaking_details() -> None:
+    with TestClient(create_app(FailingBackend())) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "error": {
+            "message": "The inference backend is temporarily unavailable",
+            "type": "server_error",
+            "param": None,
+            "code": "backend_unavailable",
+        }
+    }
+    assert "sensitive backend failure" not in response.text

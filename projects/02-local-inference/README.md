@@ -147,12 +147,16 @@ startup. The first API slice provides:
 
 - `GET /v1/models`
 - `POST /v1/chat/completions`
+- `GET /health/live`
+- `GET /health/ready`
 - Developer, system, user, and assistant text messages
 - `max_completion_tokens` and deprecated `max_tokens`
 - Token usage in completion responses
 
 Streaming, multiple choices, tools, and sampling controls are not supported in
 this slice. Unsupported request fields are rejected instead of being ignored.
+Backend generation failures return an OpenAI-shaped `503` response without
+exposing internal exception details.
 
 The compatibility contract is tested with the official OpenAI Python SDK:
 
