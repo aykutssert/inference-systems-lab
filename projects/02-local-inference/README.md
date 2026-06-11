@@ -25,6 +25,16 @@ uv run download-model
 The model is stored in the standard Hugging Face cache and is not committed to
 the repository.
 
+Download the pinned official GGUF artifact:
+
+```bash
+uv run download-gguf-model
+```
+
+The GGUF backend uses `Qwen3-1.7B-Q8_0.gguf` from
+`Qwen/Qwen3-1.7B-GGUF` at revision
+`90862c4b9d2787eaed51d12237eafdfe7c5f6077`.
+
 ## Smoke Test
 
 ```bash

@@ -1,5 +1,8 @@
 MODEL_ID = "mlx-community/Qwen3-1.7B-4bit"
 MODEL_REVISION = "3b1b1768f8f8cf8351c712464f906e86c2b8269e"
+GGUF_MODEL_ID = "Qwen/Qwen3-1.7B-GGUF"
+GGUF_MODEL_REVISION = "90862c4b9d2787eaed51d12237eafdfe7c5f6077"
+GGUF_MODEL_FILE = "Qwen3-1.7B-Q8_0.gguf"
 PROMPT = "Explain in one short sentence why model inference latency matters."
 MAX_TOKENS = 96
 WARMUP_RUNS = 1

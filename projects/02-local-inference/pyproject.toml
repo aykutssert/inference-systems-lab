@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
+download-gguf-model = "local_inference.download_gguf:main"
 download-model = "local_inference.download:main"
 local-inference-api = "local_inference.api_main:main"
 mlx-benchmark = "local_inference.benchmark_cli:main"
