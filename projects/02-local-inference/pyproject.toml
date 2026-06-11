@@ -1,0 +1,40 @@
+[project]
+name = "local-inference"
+version = "0.2.0"
+description = "Local model inference experiments on Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "huggingface-hub==1.7.1",
+  "mlx-lm==0.31.3",
+]
+
+[project.scripts]
+download-model = "local_inference.download:main"
+mlx-smoke-test = "local_inference.smoke:main"
+
+[dependency-groups]
+dev = [
+  "mypy",
+  "pytest",
+  "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.20,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["local_inference"]
