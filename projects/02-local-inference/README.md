@@ -153,3 +153,18 @@ startup. The first API slice provides:
 
 Streaming, multiple choices, tools, and sampling controls are not supported in
 this slice. Unsupported request fields are rejected instead of being ignored.
+
+The compatibility contract is tested with the official OpenAI Python SDK:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    api_key="local",
+    base_url="http://127.0.0.1:8000/v1",
+)
+response = client.chat.completions.create(
+    model="mlx-community/Qwen3-1.7B-4bit",
+    messages=[{"role": "user", "content": "Explain inference latency."}],
+)
+```

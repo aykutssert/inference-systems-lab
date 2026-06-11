@@ -22,6 +22,7 @@ mlx-smoke-test = "local_inference.smoke:main"
 dev = [
   "httpx2==2.4.0",
   "mypy",
+  "openai==2.41.1",
   "pytest",
   "ruff",
 ]
