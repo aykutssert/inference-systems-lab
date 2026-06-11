@@ -11,6 +11,7 @@ dependencies = [
 
 [project.scripts]
 download-model = "local_inference.download:main"
+mlx-benchmark = "local_inference.benchmark_cli:main"
 mlx-smoke-test = "local_inference.smoke:main"
 
 [dependency-groups]

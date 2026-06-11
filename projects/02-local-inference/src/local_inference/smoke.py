@@ -6,6 +6,7 @@ from typing import Any
 
 from mlx_lm import load, stream_generate
 
+from local_inference.chat import build_prompt
 from local_inference.config import MAX_TOKENS, MODEL_ID, MODEL_REVISION, PROMPT
 
 
@@ -26,19 +27,6 @@ class SmokeResult:
     python_version: str
     platform: str
     architecture: str
-
-
-def build_prompt(tokenizer: Any, prompt: str) -> str:
-    messages = [{"role": "user", "content": prompt}]
-    rendered = tokenizer.apply_chat_template(
-        messages,
-        tokenize=False,
-        add_generation_prompt=True,
-        enable_thinking=False,
-    )
-    if not isinstance(rendered, str):
-        raise TypeError("Chat template did not return text")
-    return rendered
 
 
 def run_smoke_test() -> SmokeResult:

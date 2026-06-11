@@ -34,3 +34,58 @@ uv run mlx-smoke-test
 The command prints the generated response followed by a JSON measurement
 record. It measures model load time, time to first token, prompt throughput,
 generation throughput, and peak MLX memory.
+
+## Benchmark Contract
+
+The benchmark workload contains three prompt categories:
+
+- Short definition
+- Medium explanation
+- Long-context summary
+
+Each measured run will be stored as one self-contained JSONL record containing:
+
+- Experiment and runtime metadata
+- Model repository and pinned revision
+- Prompt id, category, text, and token limit
+- Run index and generated response
+- Latency, throughput, token count, and memory metrics
+
+The benchmark contract is defined and tested. The full benchmark has not been
+run yet.
+
+## Runner Rules
+
+- Load the model once per experiment.
+- Run one warm-up generation with the short prompt.
+- Run each benchmark prompt three measured times.
+- Use non-thinking chat templates.
+- Use MLX-LM greedy decoding.
+- Return benchmark records in memory.
+
+The runner does not write files or calculate aggregate statistics.
+
+## Result Writer
+
+The JSONL writer:
+
+- Writes one line per benchmark record.
+- Creates parent directories when needed.
+- Publishes a complete file atomically.
+- Refuses to overwrite an existing experiment.
+- Rejects unsafe file names and mixed experiment records.
+
+## Run Benchmark
+
+```bash
+uv run mlx-benchmark
+```
+
+The command runs one warm-up and nine measured generations, then writes a
+timestamped JSONL file to the repository `benchmarks/mlx` directory.
+
+Use a different output directory when needed:
+
+```bash
+uv run mlx-benchmark --output-directory /tmp/mlx-results
+```

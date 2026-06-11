@@ -1,4 +1,4 @@
-from local_inference.smoke import build_prompt
+from local_inference.chat import build_prompt
 
 
 class TokenizerStub:
