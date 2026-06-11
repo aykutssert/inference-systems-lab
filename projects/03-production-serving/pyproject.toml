@@ -1,0 +1,45 @@
+[project]
+name = "production-serving"
+version = "0.3.0"
+description = "Production serving controls for local model inference"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi==0.136.3",
+  "local-inference",
+  "uvicorn==0.49.0",
+]
+
+[project.scripts]
+production-serving = "production_serving.main:main"
+
+[dependency-groups]
+dev = [
+  "httpx2==2.4.0",
+  "mypy",
+  "openai==2.41.1",
+  "pytest",
+  "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.20,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+local-inference = { path = "../02-local-inference", editable = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["production_serving"]

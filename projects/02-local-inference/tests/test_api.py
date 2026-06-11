@@ -1,10 +1,9 @@
-import json
-from collections.abc import Iterator, Sequence
+from collections.abc import Sequence
 
 from fastapi.testclient import TestClient
 
 from local_inference.app import create_app
-from local_inference.benchmark_runner import GenerationChunk, GenerationResult
+from local_inference.benchmark_runner import GenerationResult
 from local_inference.chat import ChatMessage
 
 
@@ -36,22 +35,6 @@ class FakeBackend:
             generation_tokens=6,
             generation_tokens_per_second=80.0,
             peak_memory_gb=1.1,
-        )
-
-    def stream_chat(
-        self,
-        messages: Sequence[ChatMessage],
-        max_tokens: int,
-    ) -> Iterator[GenerationChunk]:
-        self.messages = messages
-        self.max_tokens = max_tokens
-        yield GenerationChunk(text="Latency")
-        yield GenerationChunk(text=" streams.")
-        yield GenerationChunk(
-            text="",
-            finish_reason="stop",
-            prompt_tokens=12,
-            generation_tokens=2,
         )
 
 
@@ -162,50 +145,16 @@ def test_rejects_unknown_model() -> None:
     }
 
 
-def test_streams_chat_completion_in_openai_order() -> None:
-    backend = FakeBackend()
-
-    with TestClient(create_app(backend)) as client:
-        response = client.post(
+def test_rejects_streaming_and_multiple_choices() -> None:
+    with TestClient(create_app(FakeBackend())) as client:
+        streaming = client.post(
             "/v1/chat/completions",
             json={
                 "model": "test-model",
                 "messages": [{"role": "user", "content": "Hello"}],
-                "max_completion_tokens": 32,
                 "stream": True,
             },
         )
-
-    events = [
-        line.removeprefix("data: ")
-        for line in response.text.splitlines()
-        if line.startswith("data: ")
-    ]
-    payloads = [json.loads(event) for event in events[:-1]]
-
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    assert payloads[0]["choices"][0]["delta"] == {
-        "role": "assistant",
-        "content": "",
-    }
-    assert [payload["choices"][0]["delta"]["content"] for payload in payloads[1:3]] == [
-        "Latency",
-        " streams.",
-    ]
-    assert payloads[3]["choices"][0]["finish_reason"] == "stop"
-    assert payloads[4]["choices"] == []
-    assert payloads[4]["usage"] == {
-        "prompt_tokens": 12,
-        "completion_tokens": 2,
-        "total_tokens": 14,
-    }
-    assert events[-1] == "[DONE]"
-    assert backend.max_tokens == 32
-
-
-def test_rejects_multiple_choices() -> None:
-    with TestClient(create_app(FakeBackend())) as client:
         multiple_choices = client.post(
             "/v1/chat/completions",
             json={
@@ -215,6 +164,7 @@ def test_rejects_multiple_choices() -> None:
             },
         )
 
+    assert streaming.status_code == 400
     assert multiple_choices.status_code == 400
 
 

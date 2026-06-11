@@ -177,10 +177,9 @@ startup. The first API slice provides:
 - Developer, system, user, and assistant text messages
 - `max_completion_tokens` and deprecated `max_tokens`
 - Token usage in completion responses
-- Server-Sent Events streaming with final token usage
 
-Multiple choices, tools, and sampling controls are not supported in this
-slice. Unsupported request fields are rejected instead of being ignored.
+Streaming, multiple choices, tools, and sampling controls are not supported in
+this slice. Unsupported request fields are rejected instead of being ignored.
 Backend generation failures return an OpenAI-shaped `503` response without
 exposing internal exception details.
 

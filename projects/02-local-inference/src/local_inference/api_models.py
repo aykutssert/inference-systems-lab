@@ -18,7 +18,7 @@ class ChatCompletionRequest(BaseModel):
     max_completion_tokens: int | None = Field(default=None, ge=1, le=4096)
     max_tokens: int | None = Field(default=None, ge=1, le=4096)
     n: Literal[1] = 1
-    stream: bool = False
+    stream: Literal[False] = False
 
     @model_validator(mode="after")
     def reject_conflicting_token_limits(self) -> "ChatCompletionRequest":

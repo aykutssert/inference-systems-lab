@@ -1,0 +1,133 @@
+import json
+from collections.abc import Iterator, Sequence
+
+import httpx
+from fastapi.testclient import TestClient
+from local_inference.benchmark_runner import GenerationResult
+from local_inference.chat import ChatMessage
+from openai import OpenAI
+
+from production_serving.app import create_app
+from production_serving.streaming import GenerationChunk
+
+
+class FakeBackend:
+    model = "test-model"
+
+    def load(self) -> float:
+        return 0.1
+
+    def generate_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> GenerationResult:
+        return GenerationResult(
+            response="non-streaming response",
+            finish_reason="stop",
+            time_to_first_token_seconds=0.1,
+            prompt_tokens=8,
+            prompt_tokens_per_second=100.0,
+            generation_tokens=4,
+            generation_tokens_per_second=80.0,
+            peak_memory_gb=1.1,
+        )
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        yield GenerationChunk(text="streaming ")
+        yield GenerationChunk(text="response")
+        yield GenerationChunk(
+            text="",
+            finish_reason="stop",
+            prompt_tokens=8,
+            generation_tokens=4,
+        )
+
+
+def test_sse_chunk_order_and_usage() -> None:
+    with TestClient(create_app(FakeBackend())) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    events = [
+        line.removeprefix("data: ")
+        for line in response.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    payloads = [json.loads(event) for event in events[:-1]]
+
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert payloads[0]["choices"][0]["delta"]["role"] == "assistant"
+    assert [payload["choices"][0]["delta"]["content"] for payload in payloads[1:3]] == [
+        "streaming ",
+        "response",
+    ]
+    assert payloads[3]["choices"][0]["finish_reason"] == "stop"
+    assert payloads[4]["usage"]["total_tokens"] == 12
+    assert events[-1] == "[DONE]"
+
+
+def test_non_streaming_contract_remains_available() -> None:
+    with TestClient(create_app(FakeBackend())) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["choices"][0]["message"]["content"] == (
+        "non-streaming response"
+    )
+
+
+def test_official_openai_sdk_parses_stream() -> None:
+    with TestClient(create_app(FakeBackend())) as server:
+
+        def handle_request(request: httpx.Request) -> httpx.Response:
+            response = server.request(
+                request.method,
+                request.url.raw_path.decode(),
+                headers=dict(request.headers),
+                content=request.content,
+            )
+            return httpx.Response(
+                status_code=response.status_code,
+                headers=response.headers,
+                content=response.content,
+                request=request,
+            )
+
+        with OpenAI(
+            api_key="local-test-key",
+            base_url="http://testserver/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(handle_request)),
+        ) as client:
+            chunks = list(
+                client.chat.completions.create(
+                    model="test-model",
+                    messages=[{"role": "user", "content": "Hello"}],
+                    stream=True,
+                )
+            )
+
+    content = "".join(
+        chunk.choices[0].delta.content or "" for chunk in chunks if chunk.choices
+    )
+    usage_chunk = next(chunk for chunk in chunks if chunk.usage is not None)
+
+    assert content == "streaming response"
+    assert usage_chunk.usage is not None
+    assert usage_chunk.usage.total_tokens == 12
