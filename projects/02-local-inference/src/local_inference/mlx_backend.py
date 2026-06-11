@@ -1,4 +1,5 @@
 import time
+from collections.abc import Sequence
 from typing import Any, Literal
 
 import mlx.core as mx
@@ -7,7 +8,7 @@ from mlx_lm import load, stream_generate
 
 from local_inference.benchmark_runner import GenerationResult
 from local_inference.benchmark_schema import BenchmarkPrompt
-from local_inference.chat import build_prompt
+from local_inference.chat import ChatMessage, build_prompt
 from local_inference.config import MODEL_ID, MODEL_REVISION
 
 
@@ -29,10 +30,18 @@ class MlxBackend:
         return time.perf_counter() - started_at
 
     def generate(self, prompt: BenchmarkPrompt) -> GenerationResult:
+        messages: tuple[ChatMessage, ...] = ({"role": "user", "content": prompt.text},)
+        return self.generate_chat(messages, prompt.max_tokens)
+
+    def generate_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> GenerationResult:
         if self._model is None or self._tokenizer is None:
             raise RuntimeError("Backend must be loaded before generation")
 
-        formatted_prompt = build_prompt(self._tokenizer, prompt.text)
+        formatted_prompt = build_prompt(self._tokenizer, messages)
         mx.reset_peak_memory()
         generation_started_at = time.perf_counter()
         first_token_at: float | None = None
@@ -43,7 +52,7 @@ class MlxBackend:
             self._model,
             self._tokenizer,
             formatted_prompt,
-            max_tokens=prompt.max_tokens,
+            max_tokens=max_tokens,
         ):
             if first_token_at is None:
                 first_token_at = time.perf_counter()

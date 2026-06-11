@@ -6,7 +6,7 @@ from typing import Any
 
 from mlx_lm import load, stream_generate
 
-from local_inference.chat import build_prompt
+from local_inference.chat import ChatMessage, build_prompt
 from local_inference.config import MAX_TOKENS, MODEL_ID, MODEL_REVISION, PROMPT
 
 
@@ -36,7 +36,8 @@ def run_smoke_test() -> SmokeResult:
     tokenizer = loaded[1]
     load_seconds = time.perf_counter() - load_started_at
 
-    formatted_prompt = build_prompt(tokenizer, PROMPT)
+    messages: tuple[ChatMessage, ...] = ({"role": "user", "content": PROMPT},)
+    formatted_prompt = build_prompt(tokenizer, messages)
     generation_started_at = time.perf_counter()
     first_token_at: float | None = None
     response_parts: list[str] = []

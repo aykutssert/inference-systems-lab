@@ -1,8 +1,13 @@
-from typing import Any
+from collections.abc import Sequence
+from typing import Any, Literal, TypedDict
 
 
-def build_prompt(tokenizer: Any, prompt: str) -> str:
-    messages = [{"role": "user", "content": prompt}]
+class ChatMessage(TypedDict):
+    role: Literal["system", "user", "assistant"]
+    content: str
+
+
+def build_prompt(tokenizer: Any, messages: Sequence[ChatMessage]) -> str:
     rendered = tokenizer.apply_chat_template(
         messages,
         tokenize=False,

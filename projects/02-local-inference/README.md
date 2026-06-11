@@ -133,3 +133,23 @@ uv run mlx-benchmark-report ../../benchmarks/mlx/<experiment-id>.jsonl
 
 The command writes `<experiment-id>.md` atomically and refuses to overwrite an
 existing report. Use `--output <path>` to select a different destination.
+
+## OpenAI-Compatible API
+
+Start the local MLX service:
+
+```bash
+uv run local-inference-api
+```
+
+The service listens on `http://127.0.0.1:8000` and loads the pinned model during
+startup. The first API slice provides:
+
+- `GET /v1/models`
+- `POST /v1/chat/completions`
+- Developer, system, user, and assistant text messages
+- `max_completion_tokens` and deprecated `max_tokens`
+- Token usage in completion responses
+
+Streaming, multiple choices, tools, and sampling controls are not supported in
+this slice. Unsupported request fields are rejected instead of being ignored.

@@ -18,4 +18,6 @@ class TokenizerStub:
 
 
 def test_build_prompt_disables_thinking() -> None:
-    assert build_prompt(TokenizerStub(), "hello") == "rendered prompt"
+    messages = [{"role": "user", "content": "hello"}]
+
+    assert build_prompt(TokenizerStub(), messages) == "rendered prompt"
