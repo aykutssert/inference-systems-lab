@@ -1,12 +1,12 @@
 import time
-from collections.abc import Sequence
-from typing import Any, Literal
+from collections.abc import Iterator, Sequence
+from typing import Any, Literal, cast
 
 import mlx.core as mx
 from mlx_lm import __version__ as mlx_lm_version
 from mlx_lm import load, stream_generate
 
-from local_inference.benchmark_runner import GenerationResult
+from local_inference.benchmark_runner import GenerationChunk, GenerationResult
 from local_inference.benchmark_schema import BenchmarkPrompt
 from local_inference.chat import ChatMessage, build_prompt
 from local_inference.config import MODEL_ID, MODEL_REVISION
@@ -48,16 +48,13 @@ class MlxBackend:
         response_parts: list[str] = []
         final_response: Any = None
 
-        for generation_response in stream_generate(
-            self._model,
-            self._tokenizer,
-            formatted_prompt,
-            max_tokens=max_tokens,
-        ):
-            if first_token_at is None:
-                first_token_at = time.perf_counter()
-            response_parts.append(generation_response.text)
-            final_response = generation_response
+        for chunk in self._stream_prompt(formatted_prompt, max_tokens):
+            if chunk.text:
+                if first_token_at is None:
+                    first_token_at = time.perf_counter()
+                response_parts.append(chunk.text)
+            if chunk.is_final:
+                final_response = chunk
 
         if first_token_at is None or final_response is None:
             raise RuntimeError("Model produced no generation response")
@@ -70,6 +67,51 @@ class MlxBackend:
             response=response,
             finish_reason=final_response.finish_reason,
             time_to_first_token_seconds=first_token_at - generation_started_at,
+            prompt_tokens=cast(int, final_response.prompt_tokens),
+            prompt_tokens_per_second=cast(
+                float,
+                final_response.prompt_tokens_per_second,
+            ),
+            generation_tokens=cast(int, final_response.generation_tokens),
+            generation_tokens_per_second=cast(
+                float,
+                final_response.generation_tokens_per_second,
+            ),
+            peak_memory_gb=cast(float, final_response.peak_memory_gb),
+        )
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        if self._model is None or self._tokenizer is None:
+            raise RuntimeError("Backend must be loaded before generation")
+
+        formatted_prompt = build_prompt(self._tokenizer, messages)
+        yield from self._stream_prompt(formatted_prompt, max_tokens)
+
+    def _stream_prompt(
+        self,
+        formatted_prompt: str,
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        final_response: Any = None
+        for generation_response in stream_generate(
+            self._model,
+            self._tokenizer,
+            formatted_prompt,
+            max_tokens=max_tokens,
+        ):
+            yield GenerationChunk(text=generation_response.text)
+            final_response = generation_response
+
+        if final_response is None:
+            raise RuntimeError("Model produced no generation response")
+
+        yield GenerationChunk(
+            text="",
+            finish_reason=final_response.finish_reason,
             prompt_tokens=final_response.prompt_tokens,
             prompt_tokens_per_second=final_response.prompt_tps,
             generation_tokens=final_response.generation_tokens,

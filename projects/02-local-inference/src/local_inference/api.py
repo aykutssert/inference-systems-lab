@@ -1,10 +1,12 @@
+import json
 import logging
 import time
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from typing import Protocol, cast
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 
 from local_inference.api_models import (
     ChatCompletionRequest,
@@ -15,7 +17,7 @@ from local_inference.api_models import (
     ModelList,
     ModelObject,
 )
-from local_inference.benchmark_runner import GenerationResult
+from local_inference.benchmark_runner import GenerationChunk, GenerationResult
 from local_inference.chat import ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -31,6 +33,12 @@ class ChatBackend(Protocol):
         messages: Sequence[ChatMessage],
         max_tokens: int,
     ) -> GenerationResult: ...
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]: ...
 
 
 router = APIRouter(prefix="/v1", tags=["OpenAI compatibility"])
@@ -76,7 +84,7 @@ def list_models(request: Request) -> ModelList:
 def create_chat_completion(
     payload: ChatCompletionRequest,
     request: Request,
-) -> ChatCompletionResponse:
+) -> ChatCompletionResponse | StreamingResponse:
     backend = get_backend(request)
     if payload.model != backend.model:
         raise OpenAIAPIError(
@@ -94,6 +102,13 @@ def create_chat_completion(
         }
         for message in payload.messages
     )
+    if payload.stream:
+        return StreamingResponse(
+            stream_chat_completion(backend, messages, payload.token_limit),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     try:
         result = backend.generate_chat(messages, payload.token_limit)
     except RuntimeError as error:
@@ -121,3 +136,87 @@ def create_chat_completion(
             total_tokens=result.prompt_tokens + result.generation_tokens,
         ),
     )
+
+
+def encode_sse(payload: dict[str, object] | str) -> str:
+    if isinstance(payload, str):
+        return f"data: {payload}\n\n"
+    return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
+
+
+def stream_chat_completion(
+    backend: ChatBackend,
+    messages: Sequence[ChatMessage],
+    max_tokens: int,
+) -> Iterator[str]:
+    completion_id = f"chatcmpl-{uuid.uuid4().hex}"
+    created = int(time.time())
+
+    yield encode_sse(
+        {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": backend.model,
+            "choices": [
+                {
+                    "index": 0,
+                    "delta": {"role": "assistant", "content": ""},
+                    "finish_reason": None,
+                }
+            ],
+        }
+    )
+
+    for chunk in backend.stream_chat(messages, max_tokens):
+        if chunk.text:
+            yield encode_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": backend.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": chunk.text},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            )
+        if chunk.is_final:
+            yield encode_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": backend.model,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": chunk.finish_reason,
+                        }
+                    ],
+                }
+            )
+            yield encode_sse(
+                {
+                    "id": completion_id,
+                    "object": "chat.completion.chunk",
+                    "created": created,
+                    "model": backend.model,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": chunk.prompt_tokens,
+                        "completion_tokens": chunk.generation_tokens,
+                        "total_tokens": (
+                            cast(int, chunk.prompt_tokens)
+                            + cast(int, chunk.generation_tokens)
+                        ),
+                    },
+                }
+            )
+
+    yield encode_sse("[DONE]")

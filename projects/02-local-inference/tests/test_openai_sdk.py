@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 
 import httpx
 import pytest
@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from openai import InternalServerError, NotFoundError, OpenAI
 
 from local_inference.app import create_app
-from local_inference.benchmark_runner import GenerationResult
+from local_inference.benchmark_runner import GenerationChunk, GenerationResult
 from local_inference.chat import ChatMessage
 
 
@@ -30,6 +30,20 @@ class FakeBackend:
             generation_tokens=4,
             generation_tokens_per_second=80.0,
             peak_memory_gb=1.1,
+        )
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        yield GenerationChunk(text="SDK ")
+        yield GenerationChunk(text="streaming works.")
+        yield GenerationChunk(
+            text="",
+            finish_reason="stop",
+            prompt_tokens=8,
+            generation_tokens=4,
         )
 
 
@@ -79,6 +93,46 @@ def test_official_openai_sdk_uses_local_api() -> None:
     assert completion.choices[0].message.content == "SDK compatibility works."
     assert completion.usage is not None
     assert completion.usage.total_tokens == 12
+
+
+def test_official_openai_sdk_parses_streaming_chunks() -> None:
+    with TestClient(create_app(FakeBackend())) as server:
+
+        def handle_request(request: httpx.Request) -> httpx.Response:
+            response = server.request(
+                request.method,
+                request.url.raw_path.decode(),
+                headers=dict(request.headers),
+                content=request.content,
+            )
+            return httpx.Response(
+                status_code=response.status_code,
+                headers=response.headers,
+                content=response.content,
+                request=request,
+            )
+
+        with OpenAI(
+            api_key="local-test-key",
+            base_url="http://testserver/v1",
+            http_client=httpx.Client(transport=httpx.MockTransport(handle_request)),
+        ) as client:
+            stream = client.chat.completions.create(
+                model="test-model",
+                messages=[{"role": "user", "content": "Confirm streaming."}],
+                max_completion_tokens=32,
+                stream=True,
+            )
+            chunks = list(stream)
+
+    content = "".join(
+        chunk.choices[0].delta.content or "" for chunk in chunks if chunk.choices
+    )
+    usage_chunk = next(chunk for chunk in chunks if chunk.usage is not None)
+
+    assert content == "SDK streaming works."
+    assert usage_chunk.usage is not None
+    assert usage_chunk.usage.total_tokens == 12
 
 
 def test_official_openai_sdk_parses_local_api_errors() -> None:

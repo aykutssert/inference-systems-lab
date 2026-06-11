@@ -23,6 +23,21 @@ class GenerationResult:
     peak_memory_gb: float
 
 
+@dataclass(frozen=True)
+class GenerationChunk:
+    text: str
+    finish_reason: str | None = None
+    prompt_tokens: int | None = None
+    prompt_tokens_per_second: float | None = None
+    generation_tokens: int | None = None
+    generation_tokens_per_second: float | None = None
+    peak_memory_gb: float | None = None
+
+    @property
+    def is_final(self) -> bool:
+        return self.prompt_tokens is not None and self.generation_tokens is not None
+
+
 class BenchmarkBackend(Protocol):
     name: Literal["mlx", "llama.cpp"]
     model: str
