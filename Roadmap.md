@@ -53,7 +53,17 @@ Implementation order:
 - Implement the first local backend with MLX.
 - Expose generation through an OpenAI-compatible API.
 - Add a GGUF backend with llama.cpp.
-- Compare MLX and llama.cpp using the same model family and workload.
+
+Runtime comparison is deferred. The available artifacts use different
+quantization levels:
+
+- MLX: 4-bit
+- GGUF: Q8_0
+
+A direct benchmark would measure the runtime and quantization combination, not
+the runtime alone. Both backends are validated independently. Comparison will
+resume only when equivalent quantization and a shared process-level memory
+metric are available.
 
 The model is a controlled infrastructure workload in this version, not the
 product being evaluated. A larger model would increase memory use, startup
@@ -75,9 +85,19 @@ Completion criteria:
 - The service runs locally with one command.
 - Benchmarks are repeatable and stored as structured results.
 
+Status: complete.
+
 ## v0.3 - Production Serving
 
 Add the service controls required under concurrent load.
+
+First implementation task:
+
+- Add non-buffered Server-Sent Events streaming to
+  `POST /v1/chat/completions`.
+- Preserve the current non-streaming response contract.
+- Verify chunk ordering, final usage, disconnect cleanup, and OpenAI SDK
+  compatibility before adding timeouts or queueing.
 
 Scope:
 

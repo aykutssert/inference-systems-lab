@@ -1,7 +1,7 @@
 # Local Inference
 
-The v0.2 project runs Qwen3-1.7B on Apple Silicon with MLX before adding an
-HTTP API or a second runtime.
+The v0.2 project runs Qwen3-1.7B on Apple Silicon with MLX and llama.cpp. It
+includes an OpenAI-compatible HTTP API and repeatable MLX benchmarks.
 
 ## Model
 
@@ -41,6 +41,16 @@ server slot. Time to first token is measured from the first streamed content
 chunk. Peak memory is the highest observed resident memory of the server
 process during generation.
 
+## Runtime Comparison Decision
+
+MLX and llama.cpp are not compared directly in v0.2. The pinned MLX artifact is
+4-bit while the official GGUF artifact is Q8_0. Their current memory metrics
+also differ: MLX allocator peak versus llama.cpp process RSS.
+
+Both backends are validated independently. A direct comparison remains deferred
+until equivalent quantization and a shared process-level memory metric are
+available.
+
 ## Smoke Test
 
 ```bash
@@ -67,8 +77,7 @@ Each measured run will be stored as one self-contained JSONL record containing:
 - Run index and generated response
 - Latency, throughput, token count, and memory metrics
 
-The benchmark contract is defined and tested. The full benchmark has not been
-run yet.
+The benchmark contract is defined, tested, and validated with a full MLX run.
 
 ## Runner Rules
 

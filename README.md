@@ -12,8 +12,8 @@ measured instead of hidden by later work.
 | Version | Project | Status |
 | --- | --- | --- |
 | v0.1 | [Service Foundations](projects/01-service-foundations) | Complete |
-| v0.2 | [Local Inference](projects/02-local-inference) | In progress |
-| v0.3 | Production Serving | Planned |
+| v0.2 | [Local Inference](projects/02-local-inference) | Complete |
+| v0.3 | Production Serving | In progress |
 | v0.4 | NVIDIA Inference | Planned |
 | v0.5 | Reliable Deployment | Planned |
 | v0.6 | Multi-GPU Inference | Planned |
