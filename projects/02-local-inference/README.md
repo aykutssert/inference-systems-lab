@@ -35,6 +35,12 @@ The GGUF backend uses `Qwen3-1.7B-Q8_0.gguf` from
 `Qwen/Qwen3-1.7B-GGUF` at revision
 `90862c4b9d2787eaed51d12237eafdfe7c5f6077`.
 
+The llama.cpp integration manages one long-running `llama-server` process. It
+uses Metal offload, non-thinking chat templates, greedy decoding, and one
+server slot. Time to first token is measured from the first streamed content
+chunk. Peak memory is the highest observed resident memory of the server
+process during generation.
+
 ## Smoke Test
 
 ```bash
