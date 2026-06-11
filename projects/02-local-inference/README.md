@@ -89,3 +89,47 @@ Use a different output directory when needed:
 ```bash
 uv run mlx-benchmark --output-directory /tmp/mlx-results
 ```
+
+## Benchmark Summary
+
+The summary layer calculates prompt-level minimum, average, and maximum values
+for:
+
+- Time to first token
+- Prompt throughput
+- Generation throughput
+- Peak memory
+
+It also records run count and stable token counts. The current step implements
+the aggregation model.
+
+## Result Reader
+
+The JSONL reader reconstructs validated benchmark records and reports malformed
+data with the source file and line number. It rejects:
+
+- Invalid JSON
+- Non-object records
+- Blank lines
+- Missing or invalid fields
+- Empty benchmark files
+
+## Markdown Report
+
+The renderer converts a benchmark summary into deterministic Markdown with:
+
+- Experiment and runtime metadata
+- Model load time
+- One table row per prompt
+- Minimum, average, and maximum metrics
+
+Raw model responses remain in JSONL and are not duplicated in the report.
+
+Generate a report next to a benchmark file:
+
+```bash
+uv run mlx-benchmark-report ../../benchmarks/mlx/<experiment-id>.jsonl
+```
+
+The command writes `<experiment-id>.md` atomically and refuses to overwrite an
+existing report. Use `--output <path>` to select a different destination.
