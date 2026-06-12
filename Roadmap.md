@@ -169,6 +169,36 @@ Evidence:
 
 Status: complete.
 
+## v0.3.2 - Conversation Memory
+
+Preserve explicit user memory while avoiding unnecessary compaction.
+
+Scope:
+
+- Keep raw history while context pressure is low.
+- Warn when the input budget reaches 80 percent.
+- Compact complete user-assistant pairs at 90 percent.
+- Preserve explicit `remember` statements in a compact memory message.
+- Keep recent turns verbatim.
+- Use deterministic deletion as the final fallback.
+
+Completion criteria:
+
+- No compaction occurs below the configured pressure threshold.
+- Explicit remembered information survives removal of its source turn.
+- Recent conversation turns remain in their original form.
+- Continued prompts work after repeated compaction.
+
+Evidence:
+
+- Raw history remains unchanged below the 90 percent compaction threshold.
+- Input usage warnings begin at 80 percent.
+- Complete user-assistant pairs are removed together.
+- Explicit `remember` statements move into the memory system message.
+- Deterministic fallback rejects a latest turn that cannot fit safely.
+
+Status: complete.
+
 ## v0.4 - NVIDIA Inference
 
 Move the same workload to a rented NVIDIA GPU environment.

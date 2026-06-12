@@ -15,6 +15,8 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 DEFAULT_MODEL = MODEL_ID
 DEFAULT_TIMEOUT_SECONDS = 60.0
 DEFAULT_MAX_TOKENS = 256
+WARNING_THRESHOLD = 0.80
+COMPACTION_THRESHOLD = 0.90
 
 
 class ContextBudgetExceededError(Exception):
@@ -66,6 +68,7 @@ class ConversationHistory:
     def __init__(self, system_prompt: str | None = None) -> None:
         self.system_prompt = system_prompt
         self.turns: list[ChatMessage] = []
+        self.memory: list[str] = []
 
     def add(self, role: Literal["user", "assistant"], content: str) -> None:
         self.turns.append({"role": role, "content": content})
@@ -78,8 +81,29 @@ class ConversationHistory:
         result: list[ChatMessage] = []
         if self.system_prompt is not None:
             result.append({"role": "system", "content": self.system_prompt})
+        if self.memory:
+            memory = "\n".join(f"- {item}" for item in self.memory)
+            result.append(
+                {
+                    "role": "system",
+                    "content": f"Conversation memory:\n{memory}",
+                }
+            )
         result.extend(self.turns)
         return result
+
+    def input_usage(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        context_window: int,
+        max_tokens: int,
+    ) -> float:
+        budget = context_window - max_tokens
+        if budget <= 0:
+            raise ContextBudgetExceededError(
+                "Completion budget leaves no room for the prompt"
+            )
+        return count_prompt_tokens(tokenizer, self.messages()) / budget
 
     def compact(
         self,
@@ -98,19 +122,36 @@ class ConversationHistory:
             raise ContextBudgetExceededError(
                 "Completion budget leaves no room for the prompt"
             )
+        if self.input_usage(tokenizer, context_window, max_tokens) < (
+            COMPACTION_THRESHOLD
+        ):
+            return 0
+
+        target = int(budget * WARNING_THRESHOLD)
         removed = 0
-        while count_prompt_tokens(tokenizer, self.messages()) > budget:
+        while count_prompt_tokens(tokenizer, self.messages()) > target:
             if len(self.turns) < 3:
-                raise ContextBudgetExceededError(
-                    "The system prompt and latest user message exceed the input budget"
-                )
+                if count_prompt_tokens(tokenizer, self.messages()) > budget:
+                    raise ContextBudgetExceededError(
+                        "The system prompt and latest user message exceed the input "
+                        "budget"
+                    )
+                break
             if self.turns[0]["role"] != "user" or self.turns[1]["role"] != "assistant":
                 raise RuntimeError(
                     "Conversation history contains an invalid turn order"
                 )
+            self._remember(self.turns[0]["content"])
             del self.turns[:2]
             removed += 2
         return removed
+
+    def _remember(self, content: str) -> None:
+        if "remember" not in content.casefold():
+            return
+        normalized = " ".join(content.split())
+        if normalized not in self.memory:
+            self.memory.append(normalized)
 
 
 def parse_sse(lines: Iterable[bytes]) -> Iterable[dict[str, object]]:
@@ -239,6 +280,12 @@ def main() -> None:
 
         history.add("user", prompt)
         try:
+            usage = history.input_usage(tokenizer, context_window, args.max_tokens)
+            if WARNING_THRESHOLD <= usage < COMPACTION_THRESHOLD:
+                print(
+                    f"[context] warning: input budget is {usage:.0%} full",
+                    file=sys.stderr,
+                )
             removed = history.compact(tokenizer, context_window, args.max_tokens)
         except ContextBudgetExceededError as error:
             history.remove_pending_user()

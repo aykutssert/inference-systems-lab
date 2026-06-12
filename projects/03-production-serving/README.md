@@ -11,6 +11,11 @@ declares a 40,960-token context window. The server counts the rendered chat
 prompt with the loaded tokenizer and returns `400 context_length_exceeded`
 before generation when the prompt plus completion budget cannot fit.
 
+v0.3.2 conversation memory is complete. The client keeps raw history until
+90 percent input usage, warns at 80 percent, and then compacts complete
+conversation pairs. Explicit `remember` statements move into a compact memory
+message when their source turn is removed.
+
 ## Setup
 
 ```bash

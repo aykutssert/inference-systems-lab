@@ -1,6 +1,6 @@
 [project]
 name = "production-serving"
-version = "0.3.1"
+version = "0.3.2"
 description = "Production serving controls for local model inference"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"

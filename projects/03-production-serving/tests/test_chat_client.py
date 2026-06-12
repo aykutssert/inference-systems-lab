@@ -12,6 +12,8 @@ from local_inference.config import MODEL_ID, MODEL_REVISION
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from production_serving.chat_client import (
+    COMPACTION_THRESHOLD,
+    WARNING_THRESHOLD,
     ContextBudgetExceededError,
     ConversationHistory,
     count_prompt_tokens,
@@ -122,20 +124,39 @@ def test_multi_turn_history_preserves_order_and_system_prompt() -> None:
     ]
 
 
-def test_compaction_removes_oldest_turns_and_keeps_system_and_recent() -> None:
+def test_compaction_preserves_explicit_memory_and_recent_turns() -> None:
     tokenizer = cast(PreTrainedTokenizerBase, FakeTokenizer())
     history = ConversationHistory(system_prompt="sys")
-    history.add("user", "one two three four")
+    history.add("user", "Remember that my favorite color is blue")
     history.add("assistant", "five six seven eight")
     history.add("user", "nine ten eleven twelve")
 
-    # Each token is one word; budget = context_window - max_tokens.
-    removed = history.compact(tokenizer, context_window=15, max_tokens=2)
+    removed = history.compact(tokenizer, context_window=22, max_tokens=2)
 
     assert removed == 2
     assert history.turns == [{"role": "user", "content": "nine ten eleven twelve"}]
-    assert history.turns[-1] == {"role": "user", "content": "nine ten eleven twelve"}
-    assert count_prompt_tokens(tokenizer, history.messages()) <= 15 - 2
+    assert history.memory == ["Remember that my favorite color is blue"]
+    assert history.messages()[1] == {
+        "role": "system",
+        "content": ("Conversation memory:\n- Remember that my favorite color is blue"),
+    }
+
+
+def test_compaction_does_not_run_below_threshold() -> None:
+    tokenizer = cast(PreTrainedTokenizerBase, FakeTokenizer())
+    history = ConversationHistory()
+    history.add("user", "short question")
+    history.add("assistant", "short answer")
+    history.add("user", "another question")
+
+    removed = history.compact(tokenizer, context_window=100, max_tokens=10)
+
+    assert removed == 0
+    assert len(history.turns) == 3
+
+
+def test_context_thresholds_leave_headroom() -> None:
+    assert WARNING_THRESHOLD < COMPACTION_THRESHOLD < 1
 
 
 def test_compaction_rejects_when_latest_turn_cannot_fit() -> None:
