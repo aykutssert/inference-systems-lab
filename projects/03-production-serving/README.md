@@ -31,5 +31,15 @@ The streaming contract includes:
 - `[DONE]` terminator
 - Official OpenAI Python SDK compatibility
 
-Disconnect cancellation and real MLX streaming verification remain separate
-tasks.
+## Real MLX Verification
+
+The pinned `mlx-community/Qwen3-1.7B-4bit` model was verified through the
+running v0.3 service on June 12, 2026:
+
+- First content chunk: 1.296 seconds
+- Content chunks: 24
+- Completion tokens: 24
+- Final order: finish reason, usage, `[DONE]`
+- Non-streaming completion remained compatible
+
+Disconnect cancellation remains a separate task.
