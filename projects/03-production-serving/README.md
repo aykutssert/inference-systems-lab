@@ -85,6 +85,9 @@ Prometheus metrics are available at `GET /metrics`:
 Unmatched URLs share one bounded path label to prevent untrusted paths from
 creating unlimited metric series.
 
+The Prometheus and Grafana stack is in `observability/`. Its README documents
+the host binding, startup command, provisioned dashboard, and metric queries.
+
 ## Terminal Chat Client
 
 Start the service, then run the streaming client in one or more terminals:
@@ -134,6 +137,21 @@ concurrency 10, one request exceeded the total admission capacity and received
 model execution.
 
 Structured request-level results are stored in `benchmarks/`.
+
+## Rate Limiting
+
+Requests are limited per direct client IP before they enter the inference
+queue:
+
+```bash
+SERVING_RATE_LIMIT_REQUESTS_PER_MINUTE=60 \
+SERVING_RATE_LIMIT_BURST=20 \
+uv run production-serving
+```
+
+The defaults allow a burst of 20 requests and refill one request per second.
+Rejected requests receive an OpenAI-shaped `429` error with code
+`rate_limit_exceeded`. Forwarded IP headers are not trusted by default.
 
 ## Failure Runner
 

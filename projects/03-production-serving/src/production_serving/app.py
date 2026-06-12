@@ -16,9 +16,12 @@ from production_serving.config import (
     first_token_timeout_seconds,
     max_concurrent_requests,
     max_queued_requests,
+    rate_limit_burst,
+    rate_limit_requests_per_minute,
 )
 from production_serving.metrics import MetricsMiddleware
 from production_serving.metrics import router as metrics_router
+from production_serving.rate_limit import TokenBucketRateLimiter
 
 
 def create_app(
@@ -27,6 +30,8 @@ def create_app(
     timeout_seconds: float | None = None,
     max_concurrent: int | None = None,
     max_queued: int | None = None,
+    requests_per_minute: int | None = None,
+    rate_limit_burst_size: int | None = None,
 ) -> FastAPI:
     if backend is None:
         from production_serving.backend import StreamingMlxBackend
@@ -64,6 +69,18 @@ def create_app(
             max_concurrent if max_concurrent is not None else max_concurrent_requests()
         ),
         max_queued=max_queued if max_queued is not None else max_queued_requests(),
+    )
+    app.state.rate_limiter = TokenBucketRateLimiter(
+        requests_per_minute=(
+            requests_per_minute
+            if requests_per_minute is not None
+            else rate_limit_requests_per_minute()
+        ),
+        burst=(
+            rate_limit_burst_size
+            if rate_limit_burst_size is not None
+            else rate_limit_burst()
+        ),
     )
     app.add_middleware(MetricsMiddleware)
     app.include_router(health_router)

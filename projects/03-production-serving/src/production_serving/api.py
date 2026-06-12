@@ -31,6 +31,7 @@ from production_serving.metrics import (
     record_time_to_first_token,
 )
 from production_serving.models import ChatCompletionRequest
+from production_serving.rate_limit import TokenBucketRateLimiter
 from production_serving.streaming import GenerationChunk
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,10 @@ def get_admission_controller(request: Request) -> AdmissionController:
     return cast(AdmissionController, request.app.state.admission_controller)
 
 
+def get_rate_limiter(request: Request) -> TokenBucketRateLimiter:
+    return cast(TokenBucketRateLimiter, request.app.state.rate_limiter)
+
+
 @router.get("/models", response_model=ModelList)
 def list_models(request: Request) -> ModelList:
     backend = get_backend(request)
@@ -117,6 +122,15 @@ async def create_chat_completion(
         }
         for message in payload.messages
     )
+    client_id = request.client.host if request.client is not None else "unknown"
+    if not await get_rate_limiter(request).allow(client_id):
+        raise OpenAIAPIError(
+            "Rate limit exceeded",
+            error_type="rate_limit_error",
+            code="rate_limit_exceeded",
+            status_code=429,
+        )
+
     try:
         lease = await get_admission_controller(request).acquire()
     except QueueFullError as error:
@@ -144,6 +158,10 @@ async def create_chat_completion(
                     status_code=503,
                 )
             record_time_to_first_token(time.monotonic() - started_at)
+        except RuntimeError as error:
+            logger.exception("backend_streaming_failed")
+            await lease.release()
+            raise backend_unavailable_error() from error
         except BaseException:
             await lease.release()
             raise
@@ -170,12 +188,7 @@ async def create_chat_completion(
             )
         except RuntimeError as error:
             logger.exception("backend_generation_failed")
-            raise OpenAIAPIError(
-                "The inference backend is temporarily unavailable",
-                error_type="server_error",
-                code="backend_unavailable",
-                status_code=503,
-            ) from error
+            raise backend_unavailable_error() from error
         if time.monotonic() - started_at > timeout_seconds:
             raise request_timeout_error()
         record_time_to_first_token(result.time_to_first_token_seconds)
@@ -227,6 +240,15 @@ def request_timeout_error() -> OpenAIAPIError:
         error_type="server_error",
         code="request_timeout",
         status_code=504,
+    )
+
+
+def backend_unavailable_error() -> OpenAIAPIError:
+    return OpenAIAPIError(
+        "The inference backend is temporarily unavailable",
+        error_type="server_error",
+        code="backend_unavailable",
+        status_code=503,
     )
 
 
