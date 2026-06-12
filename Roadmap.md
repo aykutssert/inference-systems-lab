@@ -126,6 +126,17 @@ Completion criteria:
 - Service behavior under load is measured and explained.
 - Operational state is visible through dashboards.
 
+Evidence:
+
+- Structured load results are stored in
+  `projects/03-production-serving/benchmarks/`.
+- Failure behavior and operational limits are documented in
+  `projects/03-production-serving/REPORT.md`.
+- Prometheus scraping and the six-panel Grafana dashboard were verified live
+  on June 12, 2026.
+
+Status: complete.
+
 ## v0.4 - NVIDIA Inference
 
 Move the same workload to a rented NVIDIA GPU environment.

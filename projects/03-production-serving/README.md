@@ -3,6 +3,9 @@
 The v0.3 project adds production serving controls on top of the v0.2 local
 inference package.
 
+Status: complete. See [REPORT.md](REPORT.md) for measured behavior, failure
+evidence, observability verification, and operational limits.
+
 ## Setup
 
 ```bash
@@ -87,6 +90,8 @@ creating unlimited metric series.
 
 The Prometheus and Grafana stack is in `observability/`. Its README documents
 the host binding, startup command, provisioned dashboard, and metric queries.
+The stack was verified live on June 12, 2026 with the Prometheus target up and
+the six-panel Grafana dashboard provisioned.
 
 ## Terminal Chat Client
 
