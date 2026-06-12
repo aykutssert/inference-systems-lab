@@ -2,9 +2,10 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import Iterator, Sequence
+from collections.abc import AsyncIterator, Iterator, Sequence
 from typing import Protocol, cast
 
+import anyio
 from fastapi import APIRouter, Request
 from fastapi.responses import StreamingResponse
 from local_inference.api import OpenAIAPIError
@@ -18,11 +19,23 @@ from local_inference.api_models import (
 )
 from local_inference.benchmark_runner import GenerationResult
 from local_inference.chat import ChatMessage
+from starlette.types import Receive, Scope, Send
 
 from production_serving.models import ChatCompletionRequest
 from production_serving.streaming import GenerationChunk
 
 logger = logging.getLogger(__name__)
+STREAM_END = object()
+
+
+class CancellableStreamingResponse(StreamingResponse):
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            close = getattr(self.body_iterator, "aclose", None)
+            if close is not None:
+                await close()
 
 
 class StreamingBackend(Protocol):
@@ -87,7 +100,7 @@ def create_chat_completion(
         for message in payload.messages
     )
     if payload.stream:
-        return StreamingResponse(
+        return CancellableStreamingResponse(
             stream_chat_completion(backend, messages, payload.token_limit),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
@@ -128,11 +141,18 @@ def encode_sse(payload: dict[str, object] | str) -> str:
     return f"data: {json.dumps(payload, separators=(',', ':'))}\n\n"
 
 
-def stream_chat_completion(
+def next_or_end[T](iterator: Iterator[T]) -> T | object:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return STREAM_END
+
+
+async def stream_chat_completion(
     backend: StreamingBackend,
     messages: Sequence[ChatMessage],
     max_tokens: int,
-) -> Iterator[str]:
+) -> AsyncIterator[str]:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
     common = {
@@ -155,46 +175,57 @@ def stream_chat_completion(
         }
     )
 
-    for chunk in backend.stream_chat(messages, max_tokens):
-        if chunk.text:
-            yield encode_sse(
-                {
-                    **common,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {"content": chunk.text},
-                            "finish_reason": None,
-                        }
-                    ],
-                }
-            )
-        if chunk.is_final:
-            yield encode_sse(
-                {
-                    **common,
-                    "choices": [
-                        {
-                            "index": 0,
-                            "delta": {},
-                            "finish_reason": chunk.finish_reason,
-                        }
-                    ],
-                }
-            )
-            yield encode_sse(
-                {
-                    **common,
-                    "choices": [],
-                    "usage": {
-                        "prompt_tokens": chunk.prompt_tokens,
-                        "completion_tokens": chunk.generation_tokens,
-                        "total_tokens": (
-                            cast(int, chunk.prompt_tokens)
-                            + cast(int, chunk.generation_tokens)
-                        ),
-                    },
-                }
-            )
+    stream = backend.stream_chat(messages, max_tokens)
+    try:
+        while True:
+            item = await anyio.to_thread.run_sync(next_or_end, stream)
+            if item is STREAM_END:
+                break
+            chunk = cast(GenerationChunk, item)
+            if chunk.text:
+                yield encode_sse(
+                    {
+                        **common,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": chunk.text},
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                )
+            if chunk.is_final:
+                yield encode_sse(
+                    {
+                        **common,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": chunk.finish_reason,
+                            }
+                        ],
+                    }
+                )
+                yield encode_sse(
+                    {
+                        **common,
+                        "choices": [],
+                        "usage": {
+                            "prompt_tokens": chunk.prompt_tokens,
+                            "completion_tokens": chunk.generation_tokens,
+                            "total_tokens": (
+                                cast(int, chunk.prompt_tokens)
+                                + cast(int, chunk.generation_tokens)
+                            ),
+                        },
+                    }
+                )
+    finally:
+        close = getattr(stream, "close", None)
+        if close is not None:
+            with anyio.CancelScope(shield=True):
+                await anyio.to_thread.run_sync(close)
 
     yield encode_sse("[DONE]")

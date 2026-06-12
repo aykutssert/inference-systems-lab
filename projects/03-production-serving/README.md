@@ -30,6 +30,7 @@ The streaming contract includes:
 - Final token usage chunk
 - `[DONE]` terminator
 - Official OpenAI Python SDK compatibility
+- Backend iterator cleanup after client disconnect
 
 ## Real MLX Verification
 
@@ -42,4 +43,5 @@ running v0.3 service on June 12, 2026:
 - Final order: finish reason, usage, `[DONE]`
 - Non-streaming completion remained compatible
 
-Disconnect cancellation remains a separate task.
+Client disconnect closes the active backend iterator. MLX generation cleanup is
+shielded from request cancellation and runs outside the event loop.

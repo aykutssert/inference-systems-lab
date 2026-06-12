@@ -1,12 +1,19 @@
 import json
 from collections.abc import Iterator, Sequence
 
+import anyio
 import httpx
 from fastapi.testclient import TestClient
 from local_inference.benchmark_runner import GenerationResult
 from local_inference.chat import ChatMessage
 from openai import OpenAI
+from starlette.requests import ClientDisconnect
+from starlette.types import Message, Scope
 
+from production_serving.api import (
+    CancellableStreamingResponse,
+    stream_chat_completion,
+)
 from production_serving.app import create_app
 from production_serving.streaming import GenerationChunk
 
@@ -46,6 +53,29 @@ class FakeBackend:
             prompt_tokens=8,
             generation_tokens=4,
         )
+
+
+class CancellableIterator(Iterator[GenerationChunk]):
+    def __init__(self) -> None:
+        self.closed = False
+
+    def __next__(self) -> GenerationChunk:
+        return GenerationChunk(text="token")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class CancellableBackend(FakeBackend):
+    def __init__(self) -> None:
+        self.stream = CancellableIterator()
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        return self.stream
 
 
 def test_sse_chunk_order_and_usage() -> None:
@@ -131,3 +161,71 @@ def test_official_openai_sdk_parses_stream() -> None:
     assert content == "streaming response"
     assert usage_chunk.usage is not None
     assert usage_chunk.usage.total_tokens == 12
+
+
+def test_stream_cleanup_closes_backend_iterator() -> None:
+    backend = CancellableBackend()
+
+    async def consume_and_disconnect() -> None:
+        stream = stream_chat_completion(
+            backend,
+            [{"role": "user", "content": "Hello"}],
+            32,
+        )
+        await anext(stream)
+        await anext(stream)
+        await stream.aclose()
+
+    anyio.run(consume_and_disconnect)
+
+    assert backend.stream.closed is True
+
+
+def test_client_disconnect_closes_backend_iterator() -> None:
+    backend = CancellableBackend()
+
+    async def disconnect_during_stream() -> None:
+        stream = stream_chat_completion(
+            backend,
+            [{"role": "user", "content": "Hello"}],
+            32,
+        )
+        streaming_response = CancellableStreamingResponse(stream)
+        scope: Scope = {
+            "type": "http",
+            "asgi": {"version": "3.0", "spec_version": "2.4"},
+            "http_version": "1.1",
+            "method": "POST",
+            "scheme": "http",
+            "path": "/v1/chat/completions",
+            "raw_path": b"/v1/chat/completions",
+            "query_string": b"",
+            "root_path": "",
+            "headers": [],
+            "client": ("127.0.0.1", 1),
+            "server": ("127.0.0.1", 8000),
+            "state": {},
+        }
+
+        async def receive() -> Message:
+            return {"type": "http.request", "body": b"", "more_body": False}
+
+        send_calls = 0
+
+        async def send(message: Message) -> None:
+            nonlocal send_calls
+            if message["type"] == "http.response.body":
+                send_calls += 1
+                if send_calls == 2:
+                    raise OSError("client disconnected")
+
+        try:
+            await streaming_response(scope, receive, send)
+        except ClientDisconnect:
+            pass
+        else:
+            raise AssertionError("Expected ClientDisconnect")
+
+    anyio.run(disconnect_during_stream)
+
+    assert backend.stream.closed is True

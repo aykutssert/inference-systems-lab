@@ -19,14 +19,22 @@ class StreamingMlxBackend(MlxBackend):
 
         formatted_prompt = build_prompt(self._tokenizer, messages)
         final_response: Any = None
-        for generation_response in stream_generate(
-            self._model,
-            self._tokenizer,
-            formatted_prompt,
-            max_tokens=max_tokens,
-        ):
-            yield GenerationChunk(text=generation_response.text)
-            final_response = generation_response
+        stream = iter(
+            stream_generate(
+                self._model,
+                self._tokenizer,
+                formatted_prompt,
+                max_tokens=max_tokens,
+            )
+        )
+        try:
+            for generation_response in stream:
+                yield GenerationChunk(text=generation_response.text)
+                final_response = generation_response
+        finally:
+            close = getattr(stream, "close", None)
+            if close is not None:
+                close()
 
         if final_response is None:
             raise RuntimeError("Model produced no generation response")
