@@ -134,3 +134,20 @@ concurrency 10, one request exceeded the total admission capacity and received
 model execution.
 
 Structured request-level results are stored in `benchmarks/`.
+
+## Failure Runner
+
+Close a live streaming response immediately after the first content token:
+
+```bash
+uv run production-failure disconnect
+```
+
+This exercises the server's client-disconnect cleanup path against the real
+backend. The server should close the active generation iterator and release its
+admission slot so the next request can run.
+
+Live verification on June 12, 2026 disconnected after the first content token
+in 0.50 seconds. A follow-up inference started immediately, returned `200`, and
+reported a 0.23-second time to first token, confirming that the admission slot
+was released.

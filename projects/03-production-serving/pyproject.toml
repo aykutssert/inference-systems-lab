@@ -13,6 +13,7 @@ dependencies = [
 
 [project.scripts]
 production-chat = "production_serving.chat_client:main"
+production-failure = "production_serving.failure_runner:main"
 production-load = "production_serving.load_runner:main"
 production-serving = "production_serving.main:main"
 
