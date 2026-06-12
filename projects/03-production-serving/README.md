@@ -84,3 +84,21 @@ Prometheus metrics are available at `GET /metrics`:
 
 Unmatched URLs share one bounded path label to prevent untrusted paths from
 creating unlimited metric series.
+
+## Terminal Chat Client
+
+Start the service, then run the streaming client in one or more terminals:
+
+```bash
+uv run production-chat
+```
+
+Use `--base-url`, `--model`, or `--timeout` to override the defaults. Running
+multiple clients makes queueing, backpressure, `429` responses, and streaming
+behavior visible during development.
+
+The terminal client will not replace automated load testing. A separate load
+runner will record structured concurrency, throughput, time-to-first-token,
+total-latency, and error-rate results. Failure tests will cover queue
+saturation, timeout, client disconnect, and backend failure while metrics
+provide operational evidence.

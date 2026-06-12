@@ -109,6 +109,18 @@ Scope:
 - Metrics and dashboards
 - Load and failure testing
 
+Validation order:
+
+- Add a small streaming terminal client for manual multi-terminal checks.
+- Add a repeatable load runner that records structured results, including
+  concurrency, throughput, time to first token, total latency, and error rate.
+- Exercise queue saturation, `429` rejection, timeout, client disconnect, and
+  backend failure scenarios.
+- Correlate load-test results with Prometheus metrics and dashboards.
+
+The terminal client is a manual behavior demo, not a benchmark. Automated load
+and failure tests remain the source of repeatable performance evidence.
+
 Completion criteria:
 
 - Service behavior under load is measured and explained.

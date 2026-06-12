@@ -12,6 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
+production-chat = "production_serving.chat_client:main"
 production-serving = "production_serving.main:main"
 
 [dependency-groups]
