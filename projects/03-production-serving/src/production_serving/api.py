@@ -63,6 +63,10 @@ def get_backend(request: Request) -> StreamingBackend:
     return cast(StreamingBackend, request.app.state.backend)
 
 
+def get_first_token_timeout(request: Request) -> float:
+    return cast(float, request.app.state.first_token_timeout_seconds)
+
+
 @router.get("/models", response_model=ModelList)
 def list_models(request: Request) -> ModelList:
     backend = get_backend(request)
@@ -78,11 +82,12 @@ def list_models(request: Request) -> ModelList:
 
 
 @router.post("/chat/completions", response_model=ChatCompletionResponse)
-def create_chat_completion(
+async def create_chat_completion(
     payload: ChatCompletionRequest,
     request: Request,
 ) -> ChatCompletionResponse | StreamingResponse:
     backend = get_backend(request)
+    timeout_seconds = get_first_token_timeout(request)
     if payload.model != backend.model:
         raise OpenAIAPIError(
             f"Model '{payload.model}' is not available",
@@ -100,14 +105,39 @@ def create_chat_completion(
         for message in payload.messages
     )
     if payload.stream:
+        stream = backend.stream_chat(messages, payload.token_limit)
+        started_at = time.monotonic()
+        first_chunk = await anyio.to_thread.run_sync(next_or_end, stream)
+        if time.monotonic() - started_at > timeout_seconds:
+            await close_stream(stream)
+            raise request_timeout_error()
+        if first_chunk is STREAM_END:
+            await close_stream(stream)
+            raise OpenAIAPIError(
+                "The inference backend produced no response",
+                error_type="server_error",
+                code="empty_generation",
+                status_code=503,
+            )
         return CancellableStreamingResponse(
-            stream_chat_completion(backend, messages, payload.token_limit),
+            stream_chat_completion(
+                backend,
+                messages,
+                payload.token_limit,
+                stream=stream,
+                first_chunk=cast(GenerationChunk, first_chunk),
+            ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     try:
-        result = backend.generate_chat(messages, payload.token_limit)
+        started_at = time.monotonic()
+        result = await anyio.to_thread.run_sync(
+            backend.generate_chat,
+            messages,
+            payload.token_limit,
+        )
     except RuntimeError as error:
         logger.exception("backend_generation_failed")
         raise OpenAIAPIError(
@@ -116,6 +146,8 @@ def create_chat_completion(
             code="backend_unavailable",
             status_code=503,
         ) from error
+    if time.monotonic() - started_at > timeout_seconds:
+        raise request_timeout_error()
     return ChatCompletionResponse(
         id=f"chatcmpl-{uuid.uuid4().hex}",
         created=int(time.time()),
@@ -148,10 +180,29 @@ def next_or_end[T](iterator: Iterator[T]) -> T | object:
         return STREAM_END
 
 
+async def close_stream(stream: Iterator[GenerationChunk]) -> None:
+    close = getattr(stream, "close", None)
+    if close is not None:
+        with anyio.CancelScope(shield=True):
+            await anyio.to_thread.run_sync(close)
+
+
+def request_timeout_error() -> OpenAIAPIError:
+    return OpenAIAPIError(
+        "The inference backend did not produce a result before the timeout",
+        error_type="server_error",
+        code="request_timeout",
+        status_code=504,
+    )
+
+
 async def stream_chat_completion(
     backend: StreamingBackend,
     messages: Sequence[ChatMessage],
     max_tokens: int,
+    *,
+    stream: Iterator[GenerationChunk] | None = None,
+    first_chunk: GenerationChunk | None = None,
 ) -> AsyncIterator[str]:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
@@ -175,57 +226,67 @@ async def stream_chat_completion(
         }
     )
 
-    stream = backend.stream_chat(messages, max_tokens)
+    resolved_stream = stream or backend.stream_chat(messages, max_tokens)
     try:
+        if first_chunk is not None:
+            for event in encode_chunk(common, first_chunk):
+                yield event
         while True:
-            item = await anyio.to_thread.run_sync(next_or_end, stream)
+            item = await anyio.to_thread.run_sync(next_or_end, resolved_stream)
             if item is STREAM_END:
                 break
             chunk = cast(GenerationChunk, item)
-            if chunk.text:
-                yield encode_sse(
-                    {
-                        **common,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {"content": chunk.text},
-                                "finish_reason": None,
-                            }
-                        ],
-                    }
-                )
-            if chunk.is_final:
-                yield encode_sse(
-                    {
-                        **common,
-                        "choices": [
-                            {
-                                "index": 0,
-                                "delta": {},
-                                "finish_reason": chunk.finish_reason,
-                            }
-                        ],
-                    }
-                )
-                yield encode_sse(
-                    {
-                        **common,
-                        "choices": [],
-                        "usage": {
-                            "prompt_tokens": chunk.prompt_tokens,
-                            "completion_tokens": chunk.generation_tokens,
-                            "total_tokens": (
-                                cast(int, chunk.prompt_tokens)
-                                + cast(int, chunk.generation_tokens)
-                            ),
-                        },
-                    }
-                )
+            for event in encode_chunk(common, chunk):
+                yield event
     finally:
-        close = getattr(stream, "close", None)
-        if close is not None:
-            with anyio.CancelScope(shield=True):
-                await anyio.to_thread.run_sync(close)
+        await close_stream(resolved_stream)
 
     yield encode_sse("[DONE]")
+
+
+def encode_chunk(common: dict[str, object], chunk: GenerationChunk) -> tuple[str, ...]:
+    if chunk.text:
+        return (
+            encode_sse(
+                {
+                    **common,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {"content": chunk.text},
+                            "finish_reason": None,
+                        }
+                    ],
+                }
+            ),
+        )
+    if chunk.is_final:
+        return (
+            encode_sse(
+                {
+                    **common,
+                    "choices": [
+                        {
+                            "index": 0,
+                            "delta": {},
+                            "finish_reason": chunk.finish_reason,
+                        }
+                    ],
+                }
+            ),
+            encode_sse(
+                {
+                    **common,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": chunk.prompt_tokens,
+                        "completion_tokens": chunk.generation_tokens,
+                        "total_tokens": (
+                            cast(int, chunk.prompt_tokens)
+                            + cast(int, chunk.generation_tokens)
+                        ),
+                    },
+                }
+            ),
+        )
+    return ()

@@ -11,9 +11,14 @@ from local_inference.health import router as health_router
 from local_inference.service_state import ServiceState
 
 from production_serving.api import StreamingBackend, router
+from production_serving.config import first_token_timeout_seconds
 
 
-def create_app(backend: StreamingBackend | None = None) -> FastAPI:
+def create_app(
+    backend: StreamingBackend | None = None,
+    *,
+    timeout_seconds: float | None = None,
+) -> FastAPI:
     if backend is None:
         from production_serving.backend import StreamingMlxBackend
 
@@ -40,6 +45,11 @@ def create_app(backend: StreamingBackend | None = None) -> FastAPI:
     app.state.backend = resolved_backend
     app.state.service_state = service_state
     app.state.started_at = int(time.time())
+    app.state.first_token_timeout_seconds = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else first_token_timeout_seconds()
+    )
     app.include_router(health_router)
     app.include_router(router)
 

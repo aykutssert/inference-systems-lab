@@ -45,3 +45,16 @@ running v0.3 service on June 12, 2026:
 
 Client disconnect closes the active backend iterator. MLX generation cleanup is
 shielded from request cancellation and runs outside the event loop.
+
+## First Result Timeout
+
+Set the maximum wait for a non-streaming result or the first streaming token:
+
+```bash
+SERVING_FIRST_TOKEN_TIMEOUT_SECONDS=30 uv run production-serving
+```
+
+The default is 30 seconds. This is a soft deadline because MLX generation runs
+in a native synchronous call. The active call finishes safely before the
+iterator closes and the API returns an OpenAI-shaped `504` error with code
+`request_timeout`.

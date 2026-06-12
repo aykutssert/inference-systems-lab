@@ -1,4 +1,5 @@
 import json
+import time
 from collections.abc import Iterator, Sequence
 
 import anyio
@@ -76,6 +77,24 @@ class CancellableBackend(FakeBackend):
         max_tokens: int,
     ) -> Iterator[GenerationChunk]:
         return self.stream
+
+
+class SlowBackend(FakeBackend):
+    def generate_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> GenerationResult:
+        time.sleep(0.05)
+        return super().generate_chat(messages, max_tokens)
+
+    def stream_chat(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> Iterator[GenerationChunk]:
+        time.sleep(0.05)
+        yield GenerationChunk(text="late")
 
 
 def test_sse_chunk_order_and_usage() -> None:
@@ -229,3 +248,32 @@ def test_client_disconnect_closes_backend_iterator() -> None:
     anyio.run(disconnect_during_stream)
 
     assert backend.stream.closed is True
+
+
+def test_non_streaming_first_result_timeout() -> None:
+    with TestClient(create_app(SlowBackend(), timeout_seconds=0.01)) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+            },
+        )
+
+    assert response.status_code == 504
+    assert response.json()["error"]["code"] == "request_timeout"
+
+
+def test_streaming_first_token_timeout() -> None:
+    with TestClient(create_app(SlowBackend(), timeout_seconds=0.01)) as client:
+        response = client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "test-model",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 504
+    assert response.json()["error"]["code"] == "request_timeout"
