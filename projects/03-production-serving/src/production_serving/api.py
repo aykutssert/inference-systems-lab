@@ -21,6 +21,15 @@ from local_inference.benchmark_runner import GenerationResult
 from local_inference.chat import ChatMessage
 from starlette.types import Receive, Scope, Send
 
+from production_serving.admission import (
+    AdmissionController,
+    AdmissionLease,
+    QueueFullError,
+)
+from production_serving.metrics import (
+    record_generated_tokens,
+    record_time_to_first_token,
+)
 from production_serving.models import ChatCompletionRequest
 from production_serving.streaming import GenerationChunk
 
@@ -67,6 +76,10 @@ def get_first_token_timeout(request: Request) -> float:
     return cast(float, request.app.state.first_token_timeout_seconds)
 
 
+def get_admission_controller(request: Request) -> AdmissionController:
+    return cast(AdmissionController, request.app.state.admission_controller)
+
+
 @router.get("/models", response_model=ModelList)
 def list_models(request: Request) -> ModelList:
     backend = get_backend(request)
@@ -104,21 +117,36 @@ async def create_chat_completion(
         }
         for message in payload.messages
     )
+    try:
+        lease = await get_admission_controller(request).acquire()
+    except QueueFullError as error:
+        raise OpenAIAPIError(
+            "The inference queue is full",
+            error_type="server_error",
+            code="server_busy",
+            status_code=429,
+        ) from error
+
     if payload.stream:
-        stream = backend.stream_chat(messages, payload.token_limit)
-        started_at = time.monotonic()
-        first_chunk = await anyio.to_thread.run_sync(next_or_end, stream)
-        if time.monotonic() - started_at > timeout_seconds:
-            await close_stream(stream)
-            raise request_timeout_error()
-        if first_chunk is STREAM_END:
-            await close_stream(stream)
-            raise OpenAIAPIError(
-                "The inference backend produced no response",
-                error_type="server_error",
-                code="empty_generation",
-                status_code=503,
-            )
+        try:
+            stream = backend.stream_chat(messages, payload.token_limit)
+            started_at = time.monotonic()
+            first_chunk = await anyio.to_thread.run_sync(next_or_end, stream)
+            if time.monotonic() - started_at > timeout_seconds:
+                await close_stream(stream)
+                raise request_timeout_error()
+            if first_chunk is STREAM_END:
+                await close_stream(stream)
+                raise OpenAIAPIError(
+                    "The inference backend produced no response",
+                    error_type="server_error",
+                    code="empty_generation",
+                    status_code=503,
+                )
+            record_time_to_first_token(time.monotonic() - started_at)
+        except BaseException:
+            await lease.release()
+            raise
         return CancellableStreamingResponse(
             stream_chat_completion(
                 backend,
@@ -126,45 +154,51 @@ async def create_chat_completion(
                 payload.token_limit,
                 stream=stream,
                 first_chunk=cast(GenerationChunk, first_chunk),
+                lease=lease,
             ),
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     try:
-        started_at = time.monotonic()
-        result = await anyio.to_thread.run_sync(
-            backend.generate_chat,
-            messages,
-            payload.token_limit,
-        )
-    except RuntimeError as error:
-        logger.exception("backend_generation_failed")
-        raise OpenAIAPIError(
-            "The inference backend is temporarily unavailable",
-            error_type="server_error",
-            code="backend_unavailable",
-            status_code=503,
-        ) from error
-    if time.monotonic() - started_at > timeout_seconds:
-        raise request_timeout_error()
-    return ChatCompletionResponse(
-        id=f"chatcmpl-{uuid.uuid4().hex}",
-        created=int(time.time()),
-        model=backend.model,
-        choices=[
-            CompletionChoice(
-                index=0,
-                message=CompletionMessage(content=result.response),
-                finish_reason=result.finish_reason,
+        try:
+            started_at = time.monotonic()
+            result = await anyio.to_thread.run_sync(
+                backend.generate_chat,
+                messages,
+                payload.token_limit,
             )
-        ],
-        usage=CompletionUsage(
-            prompt_tokens=result.prompt_tokens,
-            completion_tokens=result.generation_tokens,
-            total_tokens=result.prompt_tokens + result.generation_tokens,
-        ),
-    )
+        except RuntimeError as error:
+            logger.exception("backend_generation_failed")
+            raise OpenAIAPIError(
+                "The inference backend is temporarily unavailable",
+                error_type="server_error",
+                code="backend_unavailable",
+                status_code=503,
+            ) from error
+        if time.monotonic() - started_at > timeout_seconds:
+            raise request_timeout_error()
+        record_time_to_first_token(result.time_to_first_token_seconds)
+        record_generated_tokens(result.generation_tokens)
+        return ChatCompletionResponse(
+            id=f"chatcmpl-{uuid.uuid4().hex}",
+            created=int(time.time()),
+            model=backend.model,
+            choices=[
+                CompletionChoice(
+                    index=0,
+                    message=CompletionMessage(content=result.response),
+                    finish_reason=result.finish_reason,
+                )
+            ],
+            usage=CompletionUsage(
+                prompt_tokens=result.prompt_tokens,
+                completion_tokens=result.generation_tokens,
+                total_tokens=result.prompt_tokens + result.generation_tokens,
+            ),
+        )
+    finally:
+        await lease.release()
 
 
 def encode_sse(payload: dict[str, object] | str) -> str:
@@ -203,6 +237,7 @@ async def stream_chat_completion(
     *,
     stream: Iterator[GenerationChunk] | None = None,
     first_chunk: GenerationChunk | None = None,
+    lease: AdmissionLease | None = None,
 ) -> AsyncIterator[str]:
     completion_id = f"chatcmpl-{uuid.uuid4().hex}"
     created = int(time.time())
@@ -212,23 +247,23 @@ async def stream_chat_completion(
         "created": created,
         "model": backend.model,
     }
-
-    yield encode_sse(
-        {
-            **common,
-            "choices": [
-                {
-                    "index": 0,
-                    "delta": {"role": "assistant", "content": ""},
-                    "finish_reason": None,
-                }
-            ],
-        }
-    )
-
     resolved_stream = stream or backend.stream_chat(messages, max_tokens)
     try:
+        yield encode_sse(
+            {
+                **common,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {"role": "assistant", "content": ""},
+                        "finish_reason": None,
+                    }
+                ],
+            }
+        )
         if first_chunk is not None:
+            if first_chunk.is_final:
+                record_generated_tokens(cast(int, first_chunk.generation_tokens))
             for event in encode_chunk(common, first_chunk):
                 yield event
         while True:
@@ -236,12 +271,15 @@ async def stream_chat_completion(
             if item is STREAM_END:
                 break
             chunk = cast(GenerationChunk, item)
+            if chunk.is_final:
+                record_generated_tokens(cast(int, chunk.generation_tokens))
             for event in encode_chunk(common, chunk):
                 yield event
+        yield encode_sse("[DONE]")
     finally:
         await close_stream(resolved_stream)
-
-    yield encode_sse("[DONE]")
+        if lease is not None:
+            await lease.release()
 
 
 def encode_chunk(common: dict[str, object], chunk: GenerationChunk) -> tuple[str, ...]:

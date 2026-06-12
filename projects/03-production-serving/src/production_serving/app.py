@@ -10,14 +10,23 @@ from local_inference.api_models import ErrorDetail, ErrorResponse
 from local_inference.health import router as health_router
 from local_inference.service_state import ServiceState
 
+from production_serving.admission import AdmissionController
 from production_serving.api import StreamingBackend, router
-from production_serving.config import first_token_timeout_seconds
+from production_serving.config import (
+    first_token_timeout_seconds,
+    max_concurrent_requests,
+    max_queued_requests,
+)
+from production_serving.metrics import MetricsMiddleware
+from production_serving.metrics import router as metrics_router
 
 
 def create_app(
     backend: StreamingBackend | None = None,
     *,
     timeout_seconds: float | None = None,
+    max_concurrent: int | None = None,
+    max_queued: int | None = None,
 ) -> FastAPI:
     if backend is None:
         from production_serving.backend import StreamingMlxBackend
@@ -50,7 +59,15 @@ def create_app(
         if timeout_seconds is not None
         else first_token_timeout_seconds()
     )
+    app.state.admission_controller = AdmissionController(
+        max_concurrent=(
+            max_concurrent if max_concurrent is not None else max_concurrent_requests()
+        ),
+        max_queued=max_queued if max_queued is not None else max_queued_requests(),
+    )
+    app.add_middleware(MetricsMiddleware)
     app.include_router(health_router)
+    app.include_router(metrics_router)
     app.include_router(router)
 
     @app.exception_handler(OpenAIAPIError)

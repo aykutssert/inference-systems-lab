@@ -58,3 +58,29 @@ The default is 30 seconds. This is a soft deadline because MLX generation runs
 in a native synchronous call. The active call finishes safely before the
 iterator closes and the API returns an OpenAI-shaped `504` error with code
 `request_timeout`.
+
+## Admission Control
+
+Inference concurrency and queue capacity are bounded:
+
+```bash
+SERVING_MAX_CONCURRENT_REQUESTS=1 \
+SERVING_MAX_QUEUED_REQUESTS=8 \
+uv run production-serving
+```
+
+The defaults allow one active inference and eight queued requests. Streaming
+requests hold their slot until completion or disconnect. A request arriving
+after the queue is full receives an OpenAI-shaped `429` error with code
+`server_busy`.
+
+## Metrics
+
+Prometheus metrics are available at `GET /metrics`:
+
+- Request count, status, duration, and active requests
+- Chat completion time to first token
+- Generated completion tokens
+
+Unmatched URLs share one bounded path label to prevent untrusted paths from
+creating unlimited metric series.
