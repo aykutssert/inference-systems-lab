@@ -53,7 +53,7 @@ def create_app(
 
     app = FastAPI(
         title="Production Serving",
-        version="0.3.0",
+        version="0.3.1",
         lifespan=lifespan,
     )
     app.state.backend = resolved_backend

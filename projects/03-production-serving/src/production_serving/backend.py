@@ -5,10 +5,33 @@ from local_inference.chat import ChatMessage, build_prompt
 from local_inference.mlx_backend import MlxBackend
 from mlx_lm import stream_generate
 
+from production_serving.context import ContextWindowExceededError
 from production_serving.streaming import GenerationChunk
 
 
 class StreamingMlxBackend(MlxBackend):
+    def validate_context(
+        self,
+        messages: Sequence[ChatMessage],
+        max_tokens: int,
+    ) -> None:
+        if self._model is None or self._tokenizer is None:
+            raise RuntimeError("Backend must be loaded before generation")
+
+        formatted_prompt = build_prompt(self._tokenizer, messages)
+        token_ids = self._tokenizer.encode(
+            formatted_prompt,
+            add_special_tokens=False,
+        )
+        prompt_tokens = len(token_ids)
+        context_window = int(self._model.args.max_position_embeddings)
+        if prompt_tokens + max_tokens > context_window:
+            raise ContextWindowExceededError(
+                prompt_tokens,
+                max_tokens,
+                context_window,
+            )
+
     def stream_chat(
         self,
         messages: Sequence[ChatMessage],

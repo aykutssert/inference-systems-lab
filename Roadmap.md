@@ -137,6 +137,38 @@ Evidence:
 
 Status: complete.
 
+## v0.3.1 - Context Safety
+
+Harden multi-turn chat behavior before moving the workload to NVIDIA.
+
+Scope:
+
+- Per-terminal conversation history
+- Token-budget visibility
+- Deterministic removal of the oldest conversation turns
+- Server-side context-window validation
+- OpenAI-compatible `context_length_exceeded` errors
+
+The pinned `mlx-community/Qwen3-1.7B-4bit` revision declares a 40,960-token
+context window in `config.json`. Runtime validation uses the loaded model config
+and the real chat-template token count instead of a hardcoded limit.
+
+Completion criteria:
+
+- Multi-turn terminal conversations preserve recent history.
+- The client compacts old turns before exceeding its input budget.
+- The server rejects oversized requests before native generation begins.
+- Context safety behavior is covered by tests and documented.
+
+Evidence:
+
+- The pinned model config was verified at 40,960 tokens.
+- Client compaction was verified live with a reduced client-only threshold.
+- Removed turns were no longer available to the model.
+- Server-side oversized requests return `400 context_length_exceeded`.
+
+Status: complete.
+
 ## v0.4 - NVIDIA Inference
 
 Move the same workload to a rented NVIDIA GPU environment.

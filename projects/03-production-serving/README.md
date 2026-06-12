@@ -6,6 +6,11 @@ inference package.
 Status: complete. See [REPORT.md](REPORT.md) for measured behavior, failure
 evidence, observability verification, and operational limits.
 
+v0.3.1 context-safety hardening is complete. The pinned model revision
+declares a 40,960-token context window. The server counts the rendered chat
+prompt with the loaded tokenizer and returns `400 context_length_exceeded`
+before generation when the prompt plus completion budget cannot fit.
+
 ## Setup
 
 ```bash
@@ -104,6 +109,21 @@ uv run production-chat
 Use `--base-url`, `--model`, or `--timeout` to override the defaults. Running
 multiple clients makes queueing, backpressure, `429` responses, and streaming
 behavior visible during development.
+
+For a fast compaction check without changing the server or model limit, lower
+only the client threshold:
+
+```bash
+uv run production-chat --context-window 100 --max-tokens 64
+```
+
+The real tokenizer is still used. The override cannot exceed the model's
+40,960-token context window.
+
+Live verification on June 12, 2026 used a 100-token client threshold with 64
+tokens reserved for generation. The client removed complete user-assistant
+pairs, reported each compaction, and the model no longer recalled information
+from removed turns. The server retained its real 40,960-token limit.
 
 The terminal client will not replace automated load testing. A separate load
 runner will record structured concurrency, throughput, time-to-first-token,

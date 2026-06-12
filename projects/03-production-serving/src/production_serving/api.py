@@ -26,6 +26,7 @@ from production_serving.admission import (
     AdmissionLease,
     QueueFullError,
 )
+from production_serving.context import ContextWindowExceededError
 from production_serving.metrics import (
     record_generated_tokens,
     record_time_to_first_token,
@@ -122,6 +123,27 @@ async def create_chat_completion(
         }
         for message in payload.messages
     )
+    validate_context = getattr(backend, "validate_context", None)
+    if validate_context is not None:
+        try:
+            await anyio.to_thread.run_sync(
+                validate_context,
+                messages,
+                payload.token_limit,
+            )
+        except ContextWindowExceededError as error:
+            raise OpenAIAPIError(
+                (
+                    f"Prompt uses {error.prompt_tokens} tokens and reserves "
+                    f"{error.max_tokens} completion tokens, exceeding the "
+                    f"{error.context_window}-token context window"
+                ),
+                error_type="invalid_request_error",
+                param="messages",
+                code="context_length_exceeded",
+                status_code=400,
+            ) from error
+
     client_id = request.client.host if request.client is not None else "unknown"
     if not await get_rate_limiter(request).allow(client_id):
         raise OpenAIAPIError(
