@@ -102,3 +102,35 @@ runner will record structured concurrency, throughput, time-to-first-token,
 total-latency, and error-rate results. Failure tests will cover queue
 saturation, timeout, client disconnect, and backend failure while metrics
 provide operational evidence.
+
+## Load Runner
+
+Run concurrent streaming requests and save structured results:
+
+```bash
+uv run production-load \
+  --requests 10 \
+  --concurrency 5 \
+  --output benchmarks/load-10x5.json
+```
+
+The report includes per-request status, error code, time to first token, total
+latency, completion tokens, and aggregate p50, p95, p99, request throughput,
+and token throughput.
+
+## Measured Load Behavior
+
+The pinned MLX model was tested on June 12, 2026 with one active inference slot
+and eight queue slots:
+
+| Requests | Concurrency | Success | 429 | p95 TTFT | p95 latency |
+| --- | --- | --- | --- | --- | --- |
+| 10 | 5 | 10 | 0 | 16.29 s | 20.11 s |
+| 10 | 10 | 9 | 1 | 27.72 s | 31.14 s |
+
+At concurrency 5, all requests fit within the active and queued capacity. At
+concurrency 10, one request exceeded the total admission capacity and received
+`429 server_busy`. The higher tail latency is queue wait time, not parallel
+model execution.
+
+Structured request-level results are stored in `benchmarks/`.
