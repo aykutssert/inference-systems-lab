@@ -59,11 +59,16 @@ jobs:
         with:
           version: v1.34.3
 
+      - name: Create validation cluster
+        uses: helm/kind-action@ef37e7f390d99f746eb8b610417061a60e82a6cc
+        with:
+          cluster_name: manifest-validation
+          kubectl_version: v1.34.3
+
       - name: Validate Kubernetes manifests
         run: >-
           kubectl apply
-          --dry-run=client
-          --validate=false
+          --dry-run=server
           -f projects/05-reliable-deployment/kubernetes/
           -o name
 
