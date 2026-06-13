@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="430" viewBox="0 0 1400 430" role="img" aria-labelledby="title description">
+  <title id="title">Inference Systems Lab architecture</title>
+  <description id="description">Request flow from authenticated terminal users through Cloudflare and Kubernetes to vLLM on a rented RunPod GPU.</description>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0d1117"/>
+      <stop offset="1" stop-color="#161b22"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1f6feb"/>
+      <stop offset="1" stop-color="#388bfd"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8957e5"/>
+      <stop offset="1" stop-color="#a371f7"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#238636"/>
+      <stop offset="1" stop-color="#2ea043"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="10" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto">
+      <path d="M0 0 L12 6 L0 12 Z" fill="#58a6ff"/>
+    </marker>
+    <style>
+      .title { fill: #f0f6fc; font: 700 27px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .label { fill: #f0f6fc; font: 700 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .detail { fill: #c9d1d9; font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tag { fill: #8b949e; font: 600 14px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; letter-spacing: .8px; }
+      .arrow-label { fill: #8b949e; font: 13px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    </style>
+  </defs>
+
+  <rect width="1400" height="430" rx="24" fill="url(#background)"/>
+  <text x="52" y="58" class="title">Authenticated inference request path</text>
+  <text x="52" y="88" class="detail">One HTTPS endpoint, isolated user access, private gateway, rented NVIDIA compute</text>
+
+  <g filter="url(#shadow)">
+    <rect x="52" y="145" width="245" height="190" rx="18" fill="#21262d" stroke="#30363d" stroke-width="2"/>
+    <rect x="52" y="145" width="245" height="8" rx="4" fill="url(#blue)"/>
+    <text x="78" y="190" class="tag">USERS</text>
+    <text x="78" y="230" class="label">Terminal clients</text>
+    <text x="78" y="262" class="detail">Separate API key</text>
+    <text x="78" y="286" class="detail">per developer</text>
+    <rect x="78" y="306" width="116" height="3" rx="2" fill="#58a6ff"/>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="385" y="145" width="245" height="190" rx="18" fill="#21262d" stroke="#30363d" stroke-width="2"/>
+    <rect x="385" y="145" width="245" height="8" rx="4" fill="url(#purple)"/>
+    <text x="411" y="190" class="tag">HTTPS EDGE</text>
+    <text x="411" y="230" class="label">Cloudflare</text>
+    <text x="411" y="262" class="detail">TLS termination</text>
+    <text x="411" y="286" class="detail">Managed tunnel</text>
+    <text x="411" y="315" class="detail">kernelgallery.com</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="718" y="125" width="300" height="230" rx="18" fill="#21262d" stroke="#30363d" stroke-width="2"/>
+    <rect x="718" y="125" width="300" height="8" rx="4" fill="url(#blue)"/>
+    <text x="744" y="170" class="tag">KUBERNETES</text>
+    <text x="744" y="210" class="label">FastAPI gateway</text>
+    <text x="744" y="244" class="detail">Authentication and revocation</text>
+    <text x="744" y="270" class="detail">Per-user rate limiting</text>
+    <text x="744" y="296" class="detail">Metrics and health checks</text>
+    <rect x="744" y="318" width="204" height="22" rx="11" fill="#1f2937"/>
+    <text x="761" y="334" class="detail">Cloudflare sidecar</text>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="1106" y="125" width="242" height="230" rx="18" fill="#21262d" stroke="#30363d" stroke-width="2"/>
+    <rect x="1106" y="125" width="242" height="8" rx="4" fill="url(#green)"/>
+    <text x="1132" y="170" class="tag">RUNPOD GPU</text>
+    <text x="1132" y="210" class="label">vLLM 0.22.1</text>
+    <text x="1132" y="244" class="detail">Continuous batching</text>
+    <text x="1132" y="270" class="detail">Paged KV cache</text>
+    <text x="1132" y="310" class="label">Qwen3-1.7B</text>
+    <text x="1132" y="336" class="detail">GPTQ Int8</text>
+  </g>
+
+  <path d="M297 240 H365" fill="none" stroke="#58a6ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M630 240 H698" fill="none" stroke="#58a6ff" stroke-width="4" marker-end="url(#arrow)"/>
+  <path d="M1018 240 H1086" fill="none" stroke="#58a6ff" stroke-width="4" marker-end="url(#arrow)"/>
+
+  <text x="315" y="225" class="arrow-label">HTTPS</text>
+  <text x="648" y="225" class="arrow-label">tunnel</text>
+  <text x="1037" y="225" class="arrow-label">API</text>
+
+  <text x="52" y="396" class="detail">Administrator path: SSH is reserved for infrastructure setup and troubleshooting.</text>
+</svg>
