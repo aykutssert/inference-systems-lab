@@ -69,9 +69,9 @@ Registry credentials remain in the cluster and are never committed.
 ## Validation
 
 GitHub Actions installs the same `kubectl` minor version as the local cluster
-and renders every committed manifest with client-side dry-run. CI also rejects
-committed Kubernetes `Secret` manifests. Local validation additionally uses
-the live API server:
+and renders every committed manifest with client-side dry-run without
+requiring a cluster connection. CI also rejects committed Kubernetes `Secret`
+manifests. Local validation additionally uses the live API server:
 
 ```bash
 kubectl apply --dry-run=server -f kubernetes/ -o name
