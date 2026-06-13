@@ -82,6 +82,29 @@ then publish it to the private GHCR package with an immutable
 `sha-<commit>` tag. The workflow does not overwrite the release tag or deploy
 to a cluster automatically.
 
+## Controlled deployment
+
+The committed Deployment pins an immutable `sha-<commit>` image tag. Updating
+production is a deliberate change:
+
+1. Wait for the image publishing job to pass.
+2. Replace the image tag in `kubernetes/deployment.yaml`.
+3. Review and commit the manifest change.
+4. Apply the manifest and wait for the rollout:
+
+```bash
+kubectl apply -f kubernetes/
+kubectl rollout status deployment/service-foundations --timeout=120s
+kubectl get pods -l app=service-foundations
+```
+
+If the new Pod does not become ready, restore the previous ReplicaSet:
+
+```bash
+kubectl rollout undo deployment/service-foundations
+kubectl rollout status deployment/service-foundations --timeout=120s
+```
+
 Verified failure behavior:
 
 - Deleting the active FastAPI Pod caused the Deployment to create a

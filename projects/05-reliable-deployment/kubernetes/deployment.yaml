@@ -18,7 +18,7 @@ spec:
         - name: ghcr-credentials
       containers:
         - name: service
-          image: ghcr.io/aykutssert/inference-systems-lab/service-foundations:0.1.0
+          image: ghcr.io/aykutssert/inference-systems-lab/service-foundations:sha-9e9c0f2adf7be566d17ed00848c5ad3ace59c311
           imagePullPolicy: IfNotPresent
           resources:
             requests:
