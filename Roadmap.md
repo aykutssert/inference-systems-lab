@@ -267,6 +267,48 @@ resources, and publishes multi-platform service images to private GHCR
 packages with immutable commit tags. Evidence and operational limits are
 documented in `projects/05-reliable-deployment/REPORT.md`.
 
+## v0.5.1 - Internal Inference Access
+
+Expose rented GPU inference as a shared internal service without requiring
+users to access the host through SSH.
+
+Access path:
+
+```text
+Terminal or web UI -> HTTPS gateway -> vLLM on rented GPU infrastructure
+```
+
+Scope:
+
+- HTTPS inference endpoint
+- One API key per user
+- API key revocation
+- User identity in structured logs and metrics
+- Per-user rate limits
+- Streaming chat completions
+- Concurrent terminal and web UI clients
+- Gateway health checks and upstream failure handling
+- Secrets outside the repository
+
+SSH remains an administrator-only path for infrastructure setup and
+troubleshooting. Users interact only with the authenticated inference API.
+Each user receives a separate key so access can be audited, limited, and
+revoked without rotating credentials for every user.
+
+Completion criteria:
+
+- At least five independently authenticated users can access one HTTPS
+  endpoint.
+- Multiple terminal or web UI clients receive streaming responses
+  concurrently.
+- Invalid and revoked keys are rejected without reaching vLLM.
+- Rate limits and request metrics are attributed to the authenticated user.
+- vLLM is not exposed directly to the public internet.
+- Setup, access revocation, concurrency behavior, and operational limits are
+  documented with live evidence.
+
+Status: planned.
+
 ## v0.6 - Multi-GPU Inference
 
 Measure distributed inference on rented multi-GPU infrastructure.
