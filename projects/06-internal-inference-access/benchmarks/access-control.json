@@ -1,0 +1,25 @@
+{
+  "date": "2026-06-13",
+  "endpoint": "https://inference.kernelgallery.com",
+  "revocation": {
+    "user": "user-a",
+    "before_status": 200,
+    "revoked_status": 401,
+    "restored_status": 200
+  },
+  "rate_limit": {
+    "limited_user": "user-a",
+    "requests": 11,
+    "status_counts": {
+      "200": 10,
+      "429": 1
+    },
+    "other_user": "user-b",
+    "other_user_status": 200
+  },
+  "metrics": {
+    "user_a_success": 11,
+    "user_a_rate_limited": 1,
+    "user_b_success": 2
+  }
+}

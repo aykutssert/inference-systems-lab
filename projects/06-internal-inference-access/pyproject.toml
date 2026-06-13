@@ -1,0 +1,45 @@
+[project]
+name = "internal-inference-access"
+version = "0.6.0"
+description = "Authenticated gateway for shared internal inference"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "fastapi",
+  "httpx>=0.28.1,<0.29",
+  "prometheus-client==0.21.1",
+  "pydantic-settings",
+  "uvicorn",
+]
+
+[project.scripts]
+internal-inference-chat = "internal_inference_access.chat_client:main"
+internal-inference-access = "internal_inference_access.main:main"
+
+[dependency-groups]
+dev = [
+  "mypy",
+  "pytest",
+  "pytest-cov",
+  "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.20,<0.12.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+addopts = "--cov=internal_inference_access --cov-report=term-missing --cov-fail-under=95"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+packages = ["internal_inference_access"]

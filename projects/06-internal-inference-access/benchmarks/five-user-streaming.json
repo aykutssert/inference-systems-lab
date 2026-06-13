@@ -1,0 +1,45 @@
+{
+  "date": "2026-06-13",
+  "endpoint": "https://inference.kernelgallery.com",
+  "model": "Qwen/Qwen3-1.7B-GPTQ-Int8",
+  "users": 5,
+  "successful": 5,
+  "wall_time_seconds": 3.7265,
+  "results": [
+    {
+      "user": "user-a",
+      "status": 200,
+      "chunks": 32,
+      "ttft_seconds": 1.882,
+      "latency_seconds": 1.9613
+    },
+    {
+      "user": "user-b",
+      "status": 200,
+      "chunks": 32,
+      "ttft_seconds": 1.8273,
+      "latency_seconds": 1.9774
+    },
+    {
+      "user": "user-c",
+      "status": 200,
+      "chunks": 32,
+      "ttft_seconds": 2.2261,
+      "latency_seconds": 2.228
+    },
+    {
+      "user": "user-d",
+      "status": 200,
+      "chunks": 32,
+      "ttft_seconds": 1.8261,
+      "latency_seconds": 1.9758
+    },
+    {
+      "user": "user-e",
+      "status": 200,
+      "chunks": 32,
+      "ttft_seconds": 3.714,
+      "latency_seconds": 3.7239
+    }
+  ]
+}

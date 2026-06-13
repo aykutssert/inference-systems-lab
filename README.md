@@ -17,7 +17,8 @@ measured instead of hidden by later work.
 | v0.3.1 | Context Safety | Complete |
 | v0.3.2 | Conversation Memory | Complete |
 | v0.4 | [NVIDIA Inference](projects/04-nvidia-inference) | Complete |
-| v0.5 | [Reliable Deployment](projects/05-reliable-deployment) | In progress |
-| v0.6 | Multi-GPU Inference | Planned |
+| v0.5 | [Reliable Deployment](projects/05-reliable-deployment) | Complete |
+| v0.6 | [Internal Inference Access](projects/06-internal-inference-access) | Complete |
+| v0.7 | Multi-GPU Inference | Planned |
 
 See [Roadmap.md](Roadmap.md) for goals and completion criteria.

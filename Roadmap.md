@@ -267,15 +267,17 @@ resources, and publishes multi-platform service images to private GHCR
 packages with immutable commit tags. Evidence and operational limits are
 documented in `projects/05-reliable-deployment/REPORT.md`.
 
-## v0.5.1 - Internal Inference Access
+## v0.6 - Internal Inference Access
 
 Expose rented GPU inference as a shared internal service without requiring
 users to access the host through SSH.
 
+Project directory: `projects/06-internal-inference-access`
+
 Access path:
 
 ```text
-Terminal or web UI -> HTTPS gateway -> vLLM on rented GPU infrastructure
+Terminal client -> HTTPS gateway -> vLLM on rented GPU infrastructure
 ```
 
 Scope:
@@ -286,7 +288,7 @@ Scope:
 - User identity in structured logs and metrics
 - Per-user rate limits
 - Streaming chat completions
-- Concurrent terminal and web UI clients
+- Concurrent terminal clients
 - Gateway health checks and upstream failure handling
 - Secrets outside the repository
 
@@ -299,19 +301,28 @@ Completion criteria:
 
 - At least five independently authenticated users can access one HTTPS
   endpoint.
-- Multiple terminal or web UI clients receive streaming responses
-  concurrently.
+- Multiple terminal clients receive streaming responses concurrently.
 - Invalid and revoked keys are rejected without reaching vLLM.
 - Rate limits and request metrics are attributed to the authenticated user.
 - vLLM is not exposed directly to the public internet.
 - Setup, access revocation, concurrency behavior, and operational limits are
   documented with live evidence.
 
-Status: planned.
+Status: complete. Project 06 exposes a rented RunPod GPU through an
+authenticated HTTPS gateway at `inference.kernelgallery.com`. Five users were
+verified concurrently with separate API keys and streaming responses.
+Revocation, invalid credentials, isolated per-user rate limits, attributed
+Prometheus metrics, gateway health checks, and upstream readiness are tested.
+The Kubernetes gateway remains private behind a Cloudflare Tunnel sidecar.
+RunPod restores the pinned vLLM runtime and GPTQ model automatically after a
+Pod reset. Evidence and operational limits are documented in
+`projects/06-internal-inference-access/REPORT.md`.
 
-## v0.6 - Multi-GPU Inference
+## v0.7 - Multi-GPU Inference
 
 Measure distributed inference on rented multi-GPU infrastructure.
+
+Planned project directory: `projects/07-multi-gpu-inference`
 
 Scope:
 

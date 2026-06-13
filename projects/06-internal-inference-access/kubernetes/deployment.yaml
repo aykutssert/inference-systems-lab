@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: internal-inference-access
+  labels:
+    app: internal-inference-access
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: internal-inference-access
+  template:
+    metadata:
+      labels:
+        app: internal-inference-access
+    spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
+      containers:
+        - name: gateway
+          image: ghcr.io/aykutssert/inference-systems-lab/internal-inference-access:dev-47afee14a9cd
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+          env:
+            - name: GATEWAY_HOST
+              value: 0.0.0.0
+            - name: GATEWAY_PORT
+              value: "8080"
+            - name: GATEWAY_API_KEYS
+              valueFrom:
+                secretKeyRef:
+                  name: internal-inference-access-secrets
+                  key: api-keys
+            - name: GATEWAY_ADMIN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: internal-inference-access-secrets
+                  key: admin-api-key
+            - name: GATEWAY_UPSTREAM_BASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: internal-inference-access-secrets
+                  key: upstream-base-url
+            - name: GATEWAY_UPSTREAM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: internal-inference-access-secrets
+                  key: upstream-api-key
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.6.0
+          args:
+            - tunnel
+            - --no-autoupdate
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-inference-cloudflared
+                  key: tunnel-token
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 20241
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 2
+            failureThreshold: 3
