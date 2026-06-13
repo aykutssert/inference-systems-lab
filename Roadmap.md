@@ -257,14 +257,15 @@ Completion criteria:
 - Failed instances recover automatically.
 - A new version can be deployed and rolled back predictably.
 
-Status: in progress. A local Docker Desktop Kubernetes cluster runs the
+Status: complete. A local Docker Desktop Kubernetes cluster runs the
 `service-foundations` FastAPI image from a private GitHub Container Registry
 package. Image pull credentials, Pod replacement, readiness, liveness,
 resource requests and limits, Secret injection, failed private-image rollout,
-and rollback behavior are verified. GitHub Actions validates the committed
-manifests, rejects committed Kubernetes Secret resources, and publishes
-multi-platform service images to private GHCR packages with immutable commit
-tags.
+rollback, and controlled immutable deployment are verified. GitHub Actions
+validates the committed manifests, rejects committed Kubernetes Secret
+resources, and publishes multi-platform service images to private GHCR
+packages with immutable commit tags. Evidence and operational limits are
+documented in `projects/05-reliable-deployment/REPORT.md`.
 
 ## v0.6 - Multi-GPU Inference
 

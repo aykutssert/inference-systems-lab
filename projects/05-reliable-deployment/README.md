@@ -3,9 +3,10 @@
 The v0.5 project turns the inference workload into a recoverable,
 version-controlled deployment.
 
-Status: in progress. The `service-foundations` FastAPI image runs from a
-private GitHub Container Registry package on the local Docker Desktop
-Kubernetes cluster.
+Status: complete. The `service-foundations` FastAPI image runs from a private
+GitHub Container Registry package on the local Docker Desktop Kubernetes
+cluster. Recovery, failed rollout, rollback, controlled immutable deployment,
+and CI validation are verified in `REPORT.md`.
 
 ## First deployment
 
@@ -111,6 +112,6 @@ Verified failure behavior:
   replacement from the same GHCR image digest.
 - A nonexistent private image tag failed with `ErrImagePull`.
 - The old ready FastAPI Pod remained available during the failed rollout.
-- `kubectl rollout undo` restored the pinned `0.1.0` image.
+- `kubectl rollout undo` restored the previously pinned image.
 - Service liveness and readiness endpoints returned successful responses after
   rollback.
