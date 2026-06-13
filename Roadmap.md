@@ -209,7 +209,7 @@ Scope:
 - vLLM
 - KV cache
 - Continuous batching
-- FP16, AWQ, and GPTQ
+- FP16 and GPTQ
 - Out-of-memory diagnosis
 
 Measure:
@@ -225,6 +225,18 @@ Completion criteria:
 
 - Benchmark results explain why each configuration is faster, slower, or
   unable to fit in memory.
+
+Status: complete. The FP16 model ran with vLLM on a rented RunPod
+instance using an NVIDIA RTX PRO 4000 Blackwell 24 GB GPU. The local benchmark
+client reaches the remote OpenAI-compatible endpoint through an SSH tunnel.
+Health, streaming, model metadata, KV cache allocation, and a concurrency 1-8
+baseline are verified. Warm output throughput scaled from 114.96 to 849.13
+tokens per second for FP16. Official GPTQ Int8 increased throughput by 32.8%
+to 42.9%, reduced model-weight memory from 3.22 GiB to 1.92 GiB, and increased
+available KV cache from 17.16 GiB to 18.18 GiB. Capacity testing identified
+concurrency 32 as the balanced interactive operating point. A controlled CUDA
+out-of-memory failure remained isolated to the allocating process, and the
+vLLM service continued serving requests.
 
 ## v0.5 - Reliable Deployment
 

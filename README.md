@@ -16,7 +16,7 @@ measured instead of hidden by later work.
 | v0.3 | [Production Serving](projects/03-production-serving) | Complete |
 | v0.3.1 | Context Safety | Complete |
 | v0.3.2 | Conversation Memory | Complete |
-| v0.4 | NVIDIA Inference | Planned |
+| v0.4 | [NVIDIA Inference](projects/04-nvidia-inference) | Complete |
 | v0.5 | Reliable Deployment | Planned |
 | v0.6 | Multi-GPU Inference | Planned |
 
